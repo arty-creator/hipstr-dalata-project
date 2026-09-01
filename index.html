@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    Este pipeline realiza a identificação, genotipagem in silico e caracterização de marcadores microssatélites (SSRs) a partir de dados de sequenciamento de baixa cobertura (lcWGS) de *Dipteryx alata* (baruzeiro), espécie nativa do Cerrado. O trabalho compõe o Capítulo 1 de uma dissertação de mestrado organizada em formato de artigos, com foco na caracterização de recursos genômicos para a espécie.
+
+O fluxo integra quatro ferramentas principais — **TRF**, **HipSTR**, **TRTools** e **VariantAnnotation** — cada uma responsável por uma etapa distinta do processo: descoberta estrutural de repetições, genotipagem empírica a partir de dados de sequenciamento, filtragem/estatísticas pós-genotipagem e anotação funcional das variantes.
+
+## Dados de Entrada
+
+- Sequenciamento *whole genome* de baixa cobertura (lcWGS), 9–14x
+- 24 indivíduos de *Dipteryx alata*
+- Genoma de referência montado em 8 cromossomos
+
+## Estrutura Conceitual: Três Datasets
+
+O pipeline gera três datasets que representam camadas analíticas distintas, unificadas pelo conceito de **viés de amostragem (ascertainment bias)** — cada camada adiciona uma nova fonte de viés cumulativo:
+
+| Dataset | Descrição | Fonte de viés |
+|---|---|---|
+| 1. Descoberta | Repetições identificadas estruturalmente no genoma de referência | Viés de detecção estrutural (inerente ao TRF) |
+| 2. Genotipagem | Loci efetivamente genotipados nos indivíduos sequenciados | Viés de detecção estrutural + viés de amostragem |
+| 3. Alta confiança | Loci genotipados que passam em filtros de qualidade/cobertura | + viés de cobertura |
+
+Essa estrutura em camadas reflete o potencial estrutural, a detectabilidade empírica e a robustez aplicada dos marcadores, respectivamente.
+
+## Etapas do Pipeline
+
+1. **Descoberta de repetições (TRF)** — identificação exploratória de regiões repetitivas no genoma de referência; copy number e período são saídas do algoritmo, não parâmetros de busca direcionada.
+2. **Extração de coordenadas (BED)** — tratamento correto das coordenadas para extração do comprimento dos arrays, mantendo a distinção entre tamanho do array e período/número de cópias.
+3. **Genotipagem in silico (HipSTR)** — genotipagem dos loci identificados diretamente a partir dos dados de lcWGS dos 24 indivíduos.
+4. **Filtragem e estatísticas (TRTools)** — processamento pós-genotipagem, geração do dataset de alta confiança e estatísticas descritivas por classe de motivo.
+5. **Anotação funcional (VariantAnnotation)** — classificação dos loci em gênicos vs. intergênicos, associando o potencial de aplicação futura dos marcadores (estudos populacionais/neutralidade vs. associação com fenótipo).
+
+## Ferramentas Utilizadas
+
+- **TRF** (Tandem Repeats Finder) — descoberta estrutural de repetições
+- **HipSTR** — genotipagem de STRs a partir de dados de sequenciamento
+- **TRTools** — filtragem, conversão e estatísticas de STRs genotipados
+- **VariantAnnotation** (Bioconductor/R) — anotação funcional das variantes
+
+## Observações
+
+- Os scripts e comandos específicos de cada etapa serão adicionados separadamente.
+- Este README cobre a visão geral conceitual e metodológica do pipeline; detalhes de parâmetros, ambiente de execução e estrutura de diretórios serão incorporados posteriormente.
+</body>
+</html>
