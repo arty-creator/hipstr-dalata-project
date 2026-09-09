@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+title: "<Título do artigo>"
+
+authors:
+  - family-names: "<Sobrenome>"
+    given-names: "<Nome>"
+    orcid: "<ORCID>"
+
+abstract: >
+  This repository contains the scripts, workflows, and supporting files
+  used to perform the analyses presented in the manuscript
+  "<Título do artigo>".
+
+repository-code: "https://github.com/arty-creator/hipstr-dalata-project"
+
+keywords:
+  - "<keyword 1>"
+  - "<keyword 2>"
+  - "<keyword 3>"
+  - "<keyword 4>"
+
+license: MIT
+
+version: "1.0.0"
+date-released: "2026-09-09"
