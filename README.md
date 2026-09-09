@@ -100,9 +100,7 @@ As versões específicas das ferramentas e dos pacotes utilizados são apresenta
 hipstr-dalata-project/
 │
 ├── README.md
-├── index.html
 ├── CITATION.cff
-├── LICENSE
 ├── .gitignore
 │
 ├── scripts/
