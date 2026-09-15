@@ -1,5 +1,5 @@
 ---
-title: "Caracterização dos SSRs descobertos via TRF"
+title: "Characterization of SSRs Discovered via TRF"
 author: "Rodrigues-Silva A."
 date: "`r Sys.Date()`"
 output:
@@ -25,7 +25,7 @@ knitr::opts_chunk$set(
 
 # Artur Silva - PPGGMP (27/04/2026)
 
-> Pacotes necessários
+> Required packages
 
 ```{r}
 library(dplyr)
@@ -36,7 +36,7 @@ library(ggrepel)
 library(tidyverse) 
 ```
 
-# 1. Ler os dados
+# 1. Read the data
 
 ```{r}
 str_data <- read_tsv("str_final.tsv", 
@@ -49,21 +49,21 @@ chr_sizes <- read_tsv("chromosome_sizes.txt",
                       show_col_types = FALSE)
 ```
 
-# 2. Tamanho do Genoma (em cromossomos caracterizados -  nao contem contigs)
+# 2. Genome Size (characterized chromosomes - does not include contigs)
 
 ```{r}
 TOTAL_CHR_SIZE_BP <- sum(chr_sizes$Chr_size_bp)
 ```
 
 
-# 3. Calcular o comprimento de cada STR
+# 3. Calculate the length of each STR
 
 ```{r}
 str_data <- str_data %>%
   mutate(STR_length = End - Start + 1)
 ```
 
-# 4. Classificar STRs por tipo de repetição (mono, di, tri, etc.)
+# 4. Classify STRs by repeat type (mono, di, tri, etc.)
 
 ```{r}
 str_data <- str_data %>%
@@ -81,7 +81,7 @@ str_data <- str_data %>%
   ))
 ```
 
-# 5. Calcular estatísticas por cromossomo
+# 5. Calculate statistics per chromosome
 
 ```{r}
 stats_per_chr <- str_data %>%
@@ -106,7 +106,7 @@ stats_per_chr <- str_data %>%
   )
 ```
 
-# 6. Juntar com tamanhos dos cromossomos
+# 6. Join with chromosome sizes
 
 ```{r}
 final_table <- chr_sizes %>%
@@ -131,7 +131,7 @@ final_table <- chr_sizes %>%
   arrange(Chromosome)
 ```
 
-# 7. Adicionar linha de totais/médias
+# 7. Add total/mean row
 
 ```{r}
 totals <- data.frame(
@@ -159,21 +159,21 @@ totals <- data.frame(
 final_table_with_totals <- bind_rows(final_table, totals)
 ```
 
-# 8. Salvar resultados
+# 8. Save results
 
 ```{r}
 write_tsv(final_table_with_totals, "str_statistics_per_chromosome.tsv")
 write_csv(final_table_with_totals, "str_statistics_per_chromosome.csv")
 ```
 
-# 9. Exibir tabela
+# 9. Display table
 
 ```{r}
 cat("\n=== STR Statistics Per Chromosome ===\n\n")
 print(final_table_with_totals, n = Inf)
 ```
 
-# 10. Sumário geral
+# 10. General summary
 
 ```{r}
 cat("\n=== Summary ===\n")
@@ -196,10 +196,10 @@ cat("  - str_statistics_per_chromosome.csv\n")
 
 ***
 
-# 11. Gráfico de pizza: distribuição dos motif
+# 11. Pie chart: motif distribution
 
 ```{r}
-# Processando dados 
+# Processing data 
 motif_counts <- data.frame(
   Motif = c("Mono", "Di", "Tri", "Tetra", "Penta", "Hexa", "Hepta", "Octa", "Nona"),
   Count = c(
@@ -217,7 +217,7 @@ motif_counts <- data.frame(
   mutate(Motif = factor(Motif, levels = c("Mono", "Di", "Tri", "Tetra", "Penta",
                                            "Hexa", "Hepta", "Octa", "Nona")))
 
-# Posições dos labels 
+# Label positions 
 motif_pos <- motif_counts %>%
   mutate(
     csum = rev(cumsum(rev(Count))),
@@ -225,14 +225,14 @@ motif_pos <- motif_counts %>%
     pos  = if_else(is.na(pos), Count / 2, pos)
   )
 
-# Paleta Okabe-Ito 
+# Okabe-Ito palette 
 motif_colors <- c(
   "Mono"  = "#56B4E9", "Di"    = "#0072B2", "Tri"   = "#009E73",
   "Tetra" = "#F0E442", "Penta" = "#E69F00", "Hexa"  = "#D55E00",
   "Hepta" = "#CC79A7", "Octa"  = "#999999", "Nona"  = "#2C2C2A"
 )
 
-# Legenda com n e % 
+# Legend with n and % 
 legend_labels <- setNames(
   paste0(
     formatC(as.character(motif_counts$Motif), width = 5, flag = "-"),
@@ -242,7 +242,7 @@ legend_labels <- setNames(
   motif_counts$Motif
 )
 
-# Gráfico 
+# Plot 
 pie_plot <- ggplot(motif_counts,
                    aes(x = "", y = Count, fill = fct_inorder(Motif))) +
 
@@ -250,7 +250,7 @@ pie_plot <- ggplot(motif_counts,
   coord_polar(theta = "y", start = 0) +
   scale_fill_manual(values = motif_colors, labels = legend_labels) +
 
-  # Labels externos com setas automáticas — sem sobreposição
+  # External labels with automatic arrows — without overlap
   geom_label_repel(
     data          = motif_pos,
     aes(y = pos, label = paste0(Motif, "\n", Percentage, "%")),
@@ -297,7 +297,7 @@ pie_plot <- ggplot(motif_counts,
                       format(sum(motif_counts$Count), big.mark = ","))
   )
 
-# Exportar
+# Export
 ggsave("motif_distribution_publication.png", pie_plot,
        width = 200, height = 160, units = "mm", dpi = 600, bg = "white")
 
@@ -306,10 +306,10 @@ ggsave("motif_distribution_publication.tiff", pie_plot,
        compression = "lzw", bg = "white")
 ```
 
-# 12. Gráfico de dispersão: % do genoma em SSRs por cromossomo
+# 12. Scatter plot: % of genome in SSRs per chromosome
 
 ```{r}
-# Processando dados 
+# Processing data 
 scatter_data <- final_table %>%
   mutate(Type = "Chromosome")
 
@@ -332,18 +332,18 @@ scatter_combined$Chromosome <- factor(
 # Valor da linha de referência
 genome_pct <- genome_total$Pct_chr_in_SSRs
 
-# Gráfico
+# Plot
 scatter_plot <- ggplot(scatter_combined,
                        aes(x = Chromosome, y = Pct_chr_in_SSRs,
                            color = Type, shape = Type)) +
 
-  # Linha de grade vertical suave para guiar o olho por cromossomo
+  # Subtle vertical grid line to guide the eye across chromosomes
   geom_vline(
     xintercept = seq_along(levels(scatter_combined$Chromosome)),
     color = "grey92", linewidth = 0.4
   ) +
 
-  # Linha de referência genome total — atrás dos pontos
+  # Genome total reference line — behind the points
   geom_hline(
     yintercept = genome_pct,
     linetype   = "dashed",
@@ -352,7 +352,7 @@ scatter_plot <- ggplot(scatter_combined,
     alpha      = 0.8
   ) +
 
-  # Lollipop: haste do ponto até y = 0 — dá peso visual sem poluir
+  # Lollipop: stem from the point to y = 0 — adds visual weight without clutter
   geom_segment(
     data = filter(scatter_combined, Type == "Chromosome"),
     aes(x = Chromosome, xend = Chromosome,
@@ -362,10 +362,10 @@ scatter_plot <- ggplot(scatter_combined,
     alpha     = 0.5
   ) +
 
-  # Pontos
+  # Points
   geom_point(size = 3.8, alpha = 0.95) +
 
-  # Paleta Okabe-Ito — mesma do pie chart
+  # Okabe-Ito palette — mesma do pie chart
   scale_color_manual(
     values = c("Chromosome" = "#0072B2", "Genome Total" = "#CC79A7")
   ) +
@@ -373,13 +373,13 @@ scatter_plot <- ggplot(scatter_combined,
     values = c("Chromosome" = 19, "Genome Total" = 18)
   ) +
 
-  # Eixo Y começa em 0
+  # Y-axis starts at 0
   scale_y_continuous(
     expand = expansion(mult = c(0, 0.08)),
     labels = function(x) paste0(x, "%")
   ) +
 
-  # Anotação da linha de referência (evita legenda redundante)
+  # Reference line annotation (avoids redundant legend)
   annotate(
     "text",
     x     = length(levels(scatter_combined$Chromosome)) - 0.3,
@@ -393,27 +393,27 @@ scatter_plot <- ggplot(scatter_combined,
 
   theme_bw(base_size = 11) +
   theme(
-    # Eixos
+    # Axes
     axis.text.x      = element_text(angle = 45, hjust = 1, size = 9,
                                     color = "grey20"),
     axis.text.y      = element_text(size = 9, color = "grey20"),
     axis.title       = element_text(size = 11, face = "bold", color = "grey10"),
     axis.ticks       = element_line(color = "grey80", linewidth = 0.35),
 
-    # Grid — só horizontal
+    # Grid — horizontal only
     panel.grid.major.x = element_blank(),
     panel.grid.minor   = element_blank(),
     panel.grid.major.y = element_line(color = "grey90", linewidth = 0.4),
     panel.border       = element_rect(color = "grey80", linewidth = 0.5),
 
-    # Legenda
+    # Legend
     legend.position    = "top",
     legend.title       = element_blank(),
     legend.text        = element_text(size = 10, color = "grey20"),
     legend.key.size    = unit(0.45, "cm"),
     legend.spacing.x   = unit(0.3, "cm"),
 
-    # Títulos
+    # Titles
     plot.title         = element_text(size = 13, face = "bold", hjust = 0.5,
                                       color = "grey10", margin = margin(b = 4)),
     plot.subtitle      = element_text(size = 9, hjust = 0.5, color = "grey50",
@@ -436,7 +436,7 @@ scatter_plot <- ggplot(scatter_combined,
     caption = paste0("Genome average: ", round(genome_pct, 2), "%")
   )
 
-# Exportar 
+# Export 
 ggsave("genome_ssr_percentage_scatter.png", scatter_plot,
        width = 220, height = 140, units = "mm", dpi = 600, bg = "white")
 
@@ -445,10 +445,10 @@ ggsave("genome_ssr_percentage_scatter.tiff", scatter_plot,
        compression = "lzw", bg = "white")
 ```
 
-# 13. Boxplot: STR length por motif
+# 13. Boxplot: STR length by motif
 
 ```{r}
-# Processando dados 
+# Processing data 
 boxplot_data <- str_data %>%
   filter(STR_type != "Other") %>%
   mutate(
@@ -466,7 +466,7 @@ boxplot_stats <- boxplot_data %>%
     .groups       = "drop"
   )
 
-# Paleta Okabe-Ito 
+# Okabe-Ito palette 
 motif_colors <- c(
   "Mono"  = "#56B4E9", "Di"    = "#0072B2", "Tri"   = "#009E73",
   "Tetra" = "#F0E442", "Penta" = "#E69F00", "Hexa"  = "#D55E00",
@@ -484,11 +484,11 @@ motif_colors_dark <- c(
 n_labels <- boxplot_stats %>%
   mutate(label = paste0("n=", format(n, big.mark = ",")))
 
-# Gráfico 
+# Plot 
 boxplot_plot <- ggplot(boxplot_data,
                        aes(x = STR_type, y = STR_length, fill = STR_type)) +
 
-  # Box principal
+  # Main box
   geom_boxplot(
     aes(color = STR_type),
     outlier.shape  = 21,
@@ -501,7 +501,7 @@ boxplot_plot <- ggplot(boxplot_data,
     fatten         = 1.5    # mediana um pouco mais fina e elegante
   ) +
 
-  # Mediana como texto acima do box
+  # Median as text above the box
   stat_summary(
     fun      = median,
     geom     = "text",
@@ -513,7 +513,7 @@ boxplot_plot <- ggplot(boxplot_data,
     family   = "sans"
   ) +
 
-  # n= abaixo de cada box (padrão de figuras genômicas)
+  # n= below each box (genomic figure standard)
   geom_text(
     data     = n_labels,
     aes(x = STR_type, y = -Inf, label = label),
@@ -534,22 +534,22 @@ boxplot_plot <- ggplot(boxplot_data,
 
   theme_bw(base_size = 11) +
   theme(
-    # Eixos
+    # Axes
     axis.text.x      = element_text(size = 10, color = "grey15", face = "bold"),
     axis.text.y      = element_text(size = 9,  color = "grey20"),
     axis.title       = element_text(size = 11, face = "bold", color = "grey10"),
     axis.ticks       = element_line(color = "grey80", linewidth = 0.35),
 
-    # Grid — só horizontal
+    # Grid — horizontal only
     panel.grid.major.x = element_blank(),
     panel.grid.minor   = element_blank(),
     panel.grid.major.y = element_line(color = "grey92", linewidth = 0.4),
     panel.border       = element_rect(color = "grey80", linewidth = 0.5),
 
-    # Sem legenda (cor já está no eixo X)
+    # No legend (color is already represented on the X-axis)
     legend.position  = "none",
 
-    # Títulos
+    # Titles
     plot.title       = element_text(size = 13, face = "bold", hjust = 0.5,
                                     color = "grey10", margin = margin(b = 4)),
     plot.subtitle    = element_text(size = 9,  hjust = 0.5, color = "grey50",
@@ -572,7 +572,7 @@ boxplot_plot <- ggplot(boxplot_data,
                       format(sum(boxplot_stats$n), big.mark = ","))
   )
 
-# Exportar
+# Export
 ggsave("str_length_by_motif_boxplot.png", boxplot_plot,
        width = 220, height = 145, units = "mm", dpi = 600, bg = "white")
 
@@ -584,11 +584,11 @@ cat("\n=== Analysis Complete ===\n")
 cat("All plots have been saved.\n")
 ```
 
-# 14. Mapa físico dos motivos descobertos via TRF (heatmap)
+# 14. Physical map of motifs discovered via TRF (heatmap)
 
 ```{r}
-# Processando dados
-# Derivar tamanho dos cromossomos a partir das regiões descobertas
+# Processing data
+# Derive chromosome sizes from the discovered regions
 chrom_sizes_disc <- str_data %>%
   group_by(Chromosome) %>%
   summarise(size_bp = max(End), .groups = "drop") %>%
@@ -608,10 +608,10 @@ chrom_plot_data_disc <- chrom_sizes_disc %>%
   mutate(size_mb = size_bp / 1e6) %>%
   filter(chr %in% unique(map_data_disc$chr))
 
-# Parâmetro: tamanho da janela
+# Parameter: window size
 window_mb <- 2
 
-# Bins de densidade
+# Density bins
 density_data_disc <- map_data_disc %>%
   mutate(bin = floor(position_mb / window_mb) * window_mb) %>%
   count(chr, bin, name = "n_loci") %>%
@@ -627,17 +627,17 @@ density_data_disc <- map_data_disc %>%
   ) %>%
   ungroup()
 
-# Paleta Okabe-Ito
+# Okabe-Ito palette
 motif_colors <- c(
   "Mono"  = "#56B4E9", "Di"    = "#0072B2", "Tri"   = "#009E73",
   "Tetra" = "#F0E442", "Penta" = "#E69F00", "Hexa"  = "#D55E00",
   "Hepta" = "#CC79A7", "Octa"  = "#999999", "Nona"  = "#2C2C2A"
 )
 
-# Gráfico
+# Plot
 physical_map_disc <- ggplot() +
 
-  # Contorno dos cromossomos
+  # Chromosome outline
   geom_rect(
     data = chrom_plot_data_disc,
     aes(xmin = as.numeric(factor(chr)) - 0.42,
@@ -646,7 +646,7 @@ physical_map_disc <- ggplot() +
     fill = "grey97", color = "grey65", linewidth = 0.4
   ) +
 
-  # Heatmap de densidade
+  # Density heatmap
   geom_tile(
     data  = density_data_disc,
     aes(x = chr, y = tile_center, fill = n_loci, height = tile_height),
@@ -713,7 +713,7 @@ physical_map_disc <- ggplot() +
                      " Mb non-overlapping windows")
   )
 
-# Exportar
+# Export
 ggsave("physical_map_ssr_discovered_heat.png", physical_map_disc,
        width = 220, height = 180, units = "mm", dpi = 600, bg = "white")
 
@@ -725,7 +725,7 @@ ggsave("physical_map_ssr_discovered_heat.tiff", physical_map_disc,
 > Versão de dist. dos motif
 
 ```{r}
-# Processando dados
+# Processing data
 chrom_sizes_disc <- str_data %>%
   group_by(Chromosome) %>%
   summarise(size_bp = max(End), .groups = "drop") %>%
@@ -745,24 +745,24 @@ chrom_plot_data_disc <- chrom_sizes_disc %>%
   mutate(size_mb = size_bp / 1e6) %>%
   filter(chr %in% unique(map_data_disc$chr))
 
-# Paleta Okabe-Ito
+# Okabe-Ito palette
 motif_colors <- c(
   "Mono"  = "#56B4E9", "Di"    = "#0072B2", "Tri"   = "#009E73",
   "Tetra" = "#F0E442", "Penta" = "#E69F00", "Hexa"  = "#D55E00",
   "Hepta" = "#CC79A7", "Octa"  = "#999999", "Nona"  = "#2C2C2A"
 )
 
-# Legenda com n por motivo
+# Legend com n por motif
 motif_n <- map_data_disc %>%
   count(motif_class_plot, name = "n") %>%
   mutate(label = paste0(motif_class_plot, "  (n=", format(n, big.mark = ","), ")"))
 
 legend_labels <- setNames(motif_n$label, motif_n$motif_class_plot)
 
-# Gráfico
+# Plot
 physical_map_disc <- ggplot() +
 
-  # Contorno dos cromossomos
+  # Chromosome outline
   geom_rect(
     data = chrom_plot_data_disc,
     aes(xmin = as.numeric(factor(chr)) - 0.38,
@@ -773,7 +773,7 @@ physical_map_disc <- ggplot() +
     linewidth = 0.4
   ) +
 
-  # Marcas dos loci por motivo
+  # Locus marks by motif
   geom_linerange(
     data = map_data_disc,
     aes(x     = chr,
@@ -835,7 +835,7 @@ physical_map_disc <- ggplot() +
     caption = "Each mark represents one SSR locus"
   )
 
-# Exportar
+# Export
 ggsave("physical_map_ssr_discovered.png", physical_map_disc,
        width = 220, height = 180, units = "mm", dpi = 600, bg = "white")
 
