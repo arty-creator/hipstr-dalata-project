@@ -1,0 +1,696 @@
+---
+title: "Anotação Genômica de Microssatélites (STRs)"
+author: "Rodrigues-Silva A."
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: show
+    theme: flatly
+---
+
+# Nota Metodológica
+
+Este pipeline implementa `locateVariants()` do pacote `VariantAnnotation`
+(Obenchain et al., *Bioinformatics* 2014) para determinar a **localização
+genômica** de loci de microssatélites (STRs). A abordagem é análoga à
+utilizada por Han et al. (*PLOS Genetics* 2022) para *Plasmodium*.
+**Importante:** esta análise **não** infere consequência funcional nem
+impacto em proteína — limita-se a classificar os loci por região genômica
+(intron, UTR, CDS, intergênico, sítio de splicing, promotor).
+
+Este pipeline **não chama** `predictCoding()` nem `summarizeVariants()`,
+pois essas funções pressupõem variantes pontuais em CDS e não são válidas
+para microssatélites. A localização via `locateVariants()` é suficiente e
+metodologicamente suportada (Han et al. 2022; Obenchain et al. 2014).
+STRs classificados como `coding` indicam sobreposição com CDS, mas **não
+implicam frameshift** — isso depende do motivo de repetição e requer
+ferramentas específicas (HipSTR, GangSTR).
+
+**Nota sobre unidades de contagem:** ao longo deste relatório, dois tipos
+de número aparecem lado a lado e **não são intercambiáveis**:
+
+- **Anotações**: cada linha gerada por `locateVariants()`. Uma mesma STR
+  pode gerar várias anotações se sobrepuser mais de um transcrito (ex.:
+  isoformas alternativas do mesmo gene, ou genes vizinhos no caso de
+  regiões intergênicas).
+- **STRs únicas**: cada STR contada no máximo uma vez por categoria de
+  região, após deduplicação por identificador genômico (`STR_UID`).
+
+Seção 4.1 reporta anotações brutas; Seções 5, 6, 7 e 10 reportam STRs
+únicas, salvo indicação contrária.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  comment = "#>",
+  fig.align = "center"
+)
+```
+
+---
+
+# 1. Setup {.tabset}
+
+## 1.1 Pacotes
+
+```{r packages}
+library(VariantAnnotation)
+library(GenomicFeatures)
+library(txdbmaker)
+library(GenomicRanges)
+library(GenomeInfoDb)
+library(IRanges)
+library(Biostrings)
+library(rtracklayer)
+library(Rsamtools)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(forcats)
+library(ggplot2)
+library(scales)
+library(patchwork)
+library(DT)
+library(kableExtra)
+library(readr)
+library(writexl)
+library(ggthemes)
+library(vcfR)
+```
+
+## 1.2 Configuração
+
+```{r config}
+VCF_STR   <- "hipstr_trf_v2_filtered.vcf"
+GENOME_FA <- "genome.fasta"
+GTF_FILE  <- "mikado.loci.clean.step2.primaryTranscripts.gff3"
+PROM_UP   <- 2000
+PROM_DOWN <- 200
+OUT_DIR   <- "resultados_str"
+dir.create(OUT_DIR, showWarnings = FALSE, recursive = TRUE)
+OUT_TSV   <- file.path(OUT_DIR, "str_localizados.tsv")
+OUT_EXCEL <- file.path(OUT_DIR, "str_localizados.xlsx")
+OUT_SUMMARY_CSV <- file.path(OUT_DIR, "loc_summary.csv")
+TXDB_FILE <- file.path(OUT_DIR, "txdb.sqlite")
+```
+
+# 2. Construção do TxDb
+
+```{r txdb}
+build_txdb <- function(genome_fa, gtf_file, txdb_file) {
+  # Indexa FASTA se necessário
+  if (!file.exists(paste0(genome_fa, ".fai")))
+    indexFa(genome_fa)
+  fa <- FaFile(genome_fa)
+  on.exit(close(fa), add = TRUE)
+  open(fa)
+  fa_seqs <- seqnames(seqinfo(fa))
+  # Retorna TxDb existente se já foi construído
+  if (file.exists(txdb_file)) {
+    message("TxDb existente encontrado: ", txdb_file)
+    return(loadDb(txdb_file))
+  }
+  # Importa GFF/GTF
+  fmt <- ifelse(grepl("\\.gff3?$", gtf_file, ignore.case = TRUE), "gff3", "gtf")
+  gr_full <- rtracklayer::import(gtf_file, format = fmt)
+  # Filtra contigs ausentes no FASTA
+  gff_seqs    <- as.character(unique(seqnames(gr_full)))
+  missing_seq <- setdiff(gff_seqs, fa_seqs)
+  if (length(missing_seq) > 0) {
+    message(
+      length(missing_seq), " contigs no GFF ausentes no FASTA — removidos: ",
+      paste(head(missing_seq, 5), collapse = ", "),
+      if (length(missing_seq) > 5) " ..."
+    )
+    gr_full <- gr_full[as.character(seqnames(gr_full)) %in% fa_seqs]
+    seqlevels(gr_full, pruning.mode = "coarse") <-
+      intersect(fa_seqs, seqlevels(gr_full))
+  }
+  seqinfo(gr_full) <- seqinfo(fa)[seqlevels(gr_full)]
+  message("Features retidas: ", length(gr_full))
+  # Constrói e salva TxDb
+  txdb <- txdbmaker::makeTxDbFromGRanges(gr_full, taxonomyId = NA)
+  saveDb(txdb, txdb_file)
+  message("TxDb salvo: ", txdb_file)
+  txdb
+}
+txdb <- build_txdb(GENOME_FA, GTF_FILE, TXDB_FILE)
+cat(sprintf(
+  "Genes: %d | Transcritos: %d | Exons: %d | CDS: %d\n",
+  length(genes(txdb)), length(transcripts(txdb)),
+  length(exons(txdb)), length(cds(txdb))
+))
+```
+
+# 3. Leitura do VCF
+
+```{r read_vcf}
+vcf <- readVcf(VCF_STR, genome = "custom")
+cat(sprintf("STRs: %d | Amostras: %d\n", nrow(vcf), ncol(vcf)))
+# Resumo de comprimento alélico
+ref_len <- width(ref(vcf))
+alt_len <- vapply(alt(vcf), function(a) max(width(a)), integer(1))
+cat(sprintf(
+"REF — mediana: %d, max: %d\nALT — mediana: %d, max: %d\n",
+  median(ref_len), max(ref_len), median(alt_len), max(alt_len)
+))
+```
+
+## 3.1 Harmonização de Seqlevels
+
+```{r seqlevels}
+harmonize_seqlevels <- function(vcf, txdb) {
+  vcf_seqs  <- seqlevels(vcf)
+  txdb_seqs <- seqlevels(txdb)
+  common    <- intersect(vcf_seqs, txdb_seqs)
+  # Tenta remoção de prefixo chr se não houver match direto
+  if (length(common) == 0) {
+    message("Sem contigs em comum — tentando remoção de prefixo chr...")
+    vcf <- renameSeqlevels(vcf, setNames(sub("^[Cc]hr", "", vcf_seqs), vcf_seqs))
+    common <- intersect(seqlevels(vcf), txdb_seqs)
+  }
+  stopifnot("Nenhum contig em comum entre VCF e TxDb" = length(common) > 0)
+  cat(sprintf("Contigs em comum: %d\n", length(common)))
+  vcf <- vcf[as.character(seqnames(vcf)) %in% common]
+  seqlevels(vcf, pruning.mode = "coarse") <- common
+  cat(sprintf("STRs após filtro: %d\n", nrow(vcf)))
+  vcf
+}
+vcf <- harmonize_seqlevels(vcf, txdb)
+```
+
+## 3.2 Identificador Único de STR (`STR_UID`)
+
+`rownames(vcf)` (campo `ID` do VCF) não é confiável como identificador de
+deduplicação: chamadores como o HipSTR frequentemente deixam esse campo
+como `"."` para todos os registros, ou podem gerar valores repetidos.
+Como qualquer contagem de "STRs únicas" nas seções seguintes depende de
+um identificador realmente único por STR, construímos aqui um ID baseado
+na posição genômica (`CHROM:START`), que é sempre único.
+
+```{r str_uid}
+n_dup_id <- sum(duplicated(rownames(vcf)))
+if (n_dup_id > 0) {
+  cat(sprintf(
+    "Atenção: %d rownames(vcf) duplicados — STR_ID não é confiável para deduplicação; usando STR_UID (CHROM:START)\n",
+    n_dup_id
+  ))
+} else {
+  cat("rownames(vcf) são únicos — nenhuma duplicata encontrada.\n")
+}
+
+str_uid <- paste0(as.character(seqnames(vcf)), ":", start(vcf))
+stopifnot("STR_UID contém duplicatas — verifique o VCF (posições repetidas?)" =
+            !any(duplicated(str_uid)))
+cat(sprintf("STR_UID únicos: %d (deve ser igual ao total de STRs: %d)\n",
+            length(unique(str_uid)), nrow(vcf)))
+```
+
+# 4. locateVariants() — Anotação Regional {.tabset}
+
+`locateVariants()` mapeia cada STR para todas as regiões genômicas sobrepostas.
+Um STR na junção éxon-íntron receberá múltiplas anotações (esperado).
+| Classe | Região |
+|--------|--------|
+| `CodingVariants()` | CDS |
+| `IntronVariants()` | Íntron |
+| `FiveUTRVariants()` | 5' UTR |
+| `ThreeUTRVariants()` | 3' UTR |
+| `SpliceSiteVariants()` | ±2 bp da junção éxon-íntron |
+| `PromoterVariants()` | Promotor (customizável) |
+| `IntergenicVariants()` | Intergênico |
+
+## 4.1 Execução
+
+```{r locate}
+loc <- locateVariants(
+  query   = vcf,
+  subject = txdb,
+  region  = AllVariants(
+    promoter   = PromoterVariants(upstream = PROM_UP, downstream = PROM_DOWN),
+    intergenic = IntergenicVariants(upstream = 1e6L, downstream = 1e6L)
+  )
+)
+cat(sprintf(
+  "Anotações (STR x transcrito x regiao): %d | STRs anotados: %d\n",
+  length(loc), length(unique(loc$QUERYID))
+))
+cat("\n--- Distribuição de ANOTAÇÕES (não deduplicada; ver Seção 5.1 para STRs únicas) ---\n")
+print(sort(table(loc$LOCATION), decreasing = TRUE))
+```
+
+*Os números acima contam **anotações**, não STRs. Como uma STR pode se
+sobrepor a mais de um transcrito, ela pode gerar múltiplas linhas em
+`loc` — uma por combinação STR × transcrito × região. Já as Seções 5 e 6
+reportam o número de **SSRs com pelo menos 1 anotação**: cada SSR contado no máximo uma vez
+DENTRO de cada categoria de região (`LOCATION`), após deduplicação por
+`STR_UID`. Como uma mesma SSR pode ter anotação em mais de uma
+categoria simultaneamente (ex.: promoter + fiveUTR), a soma dessas
+contagens entre categorias pode exceder o total geral de SSRs
+anotadas no dataset (ver Seção 5.2).*
+
+## 4.2 Tabela de Resultados
+
+```{r build_table}
+loc_df <- as.data.frame(loc, row.names = NULL) |>
+  dplyr::transmute(
+    CHROM    = seqnames,
+    START    = start,
+    END      = end,
+    STR_ID   = rownames(vcf)[QUERYID],   # ID original do VCF — apenas para referência/exibição
+    STR_UID  = str_uid[QUERYID],          # identificador único (CHROM:START) — usar para dedup/contagens
+    REF      = as.character(ref(vcf)[QUERYID]),
+    ALT      = vapply(alt(vcf)[QUERYID], function(a) {
+      paste(as.character(a), collapse = ",")
+    }, character(1)),
+    REF_LEN  = nchar(REF),
+    ALT_LEN  = nchar(sub(",.*", "", ALT)),
+    DELTA_BP = ALT_LEN - REF_LEN,
+    QUAL     = qual(vcf)[QUERYID],
+    FILTER   = as.character(filt(vcf)[QUERYID]),
+    GENE_ID  = as.character(GENEID),
+    TX_ID    = as.character(TXID),
+    LOCATION = as.character(LOCATION)
+  ) |>
+  dplyr::arrange(CHROM, START)
+cat(sprintf("Tabela: %d linhas (anotações) × %d colunas | %d STRs (STR_UID)\n",
+            nrow(loc_df), ncol(loc_df), dplyr::n_distinct(loc_df$STR_UID)))
+```
+
+# 5. Estatísticas Descritivas {.tabset}
+
+Todas as contagens desta seção usam `STR_UID` para deduplicação: cada
+STR é contada no máximo uma vez por categoria de região, independente de
+quantos transcritos ela sobreponha.
+
+## 5.1 STRs por Região
+
+```{r stats_region}
+region_unique <- loc_df |>
+  dplyr::distinct(STR_UID, LOCATION) |>
+  dplyr::count(LOCATION, name = "n_STRs") |>
+  dplyr::arrange(desc(n_STRs)) |>
+  dplyr::mutate(pct = n_STRs / sum(n_STRs))
+
+kableExtra::kbl(
+  region_unique |> mutate(pct = scales::percent(pct, 0.1)),
+  col.names = c("Região", "STRs ≥ 1 anotação", "%"),
+  caption   = "STRs por região genômica"
+) |>
+  kableExtra::kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE
+  )
+```
+
+## 5.2 Sobreposição Multi-região
+
+```{r stats_overlap}
+multi <- loc_df |>
+  dplyr::group_by(STR_UID) |>
+  dplyr::summarise(n_regioes = n_distinct(LOCATION), .groups = "drop") |>
+  dplyr::count(n_regioes, name = "n_STRs") |>
+  dplyr::mutate(pct = scales::percent(n_STRs / sum(n_STRs), 0.1))
+
+cat(sprintf(
+  "Em 1 região: %d | Em 2+ regiões: %d\n",
+  sum(multi$n_STRs[multi$n_regioes == 1]),
+  sum(multi$n_STRs[multi$n_regioes > 1])
+))
+```
+
+## 5.3 Extração dos motivos a partir do campo INFO
+
+```{r}
+library(vcfR)
+
+vcfr_obj  <- vcfR::read.vcfR(VCF_STR, verbose = FALSE)
+vcfr_uid  <- paste0(vcfr_obj@fix[, "CHROM"], ":", vcfr_obj@fix[, "POS"])
+
+stopifnot("STR_UID (vcfR) contém duplicatas" = !any(duplicated(vcfr_uid)))
+
+info_raw <- vcfr_obj@fix[, "INFO"]
+
+period_df <- tibble::tibble(
+  STR_UID = vcfr_uid,
+  PERIOD  = as.integer(stringr::str_extract(info_raw, "(?<=PERIOD=)[0-9]+"))
+) |>
+  dplyr::mutate(
+    MOTIF_CLASS = dplyr::case_when(
+      PERIOD == 1 ~ "mono",
+      PERIOD == 2 ~ "di",
+      PERIOD == 3 ~ "tri",
+      PERIOD == 4 ~ "tetra",
+      PERIOD == 5 ~ "penta",
+      PERIOD == 6 ~ "hexa",
+      PERIOD == 7 ~ "hepta",
+      PERIOD == 8 ~ "octa",
+      PERIOD == 9 ~ "nona",
+      TRUE ~ NA_character_
+    ),
+    MOTIF_CLASS = factor(MOTIF_CLASS,
+                          levels = c("mono","di","tri","tetra","penta","hexa","hepta", "octa", "nona"))
+  )
+```
+
+
+# 6. Visualizações {.tabset}
+
+```{r palette, include=FALSE}
+location_pal <- c(
+  coding     = "#E6393A",
+  spliceSite = "#003399",
+  fiveUTR    = "#4DAF4A",
+  threeUTR   = "#F5C400",
+  intron     = "#984EA3",
+  promoter   = "#A65628",
+  intergenic = "#999999"
+)
+
+theme_publication <- function(base_size = 12, base_family = "sans") {
+  theme_foundation(base_size = base_size, base_family = base_family) +
+  theme(
+    plot.background   = element_rect(fill = "white", colour = NA),
+    panel.background  = element_rect(fill = "white", colour = NA),
+    panel.border      = element_rect(colour = "black", fill = NA, linewidth = 0.6),
+    panel.grid.major  = element_line(colour = "#E8E8E8", linewidth = 0.35),
+    panel.grid.minor  = element_blank(),
+    axis.line         = element_blank(),
+    axis.ticks        = element_line(colour = "black", linewidth = 0.4),
+    axis.ticks.length = unit(2.5, "pt"),
+    axis.text         = element_text(colour = "black", size = rel(0.88)),
+    axis.title        = element_text(colour = "black", size = rel(0.95),
+                                     margin = margin(t = 4, r = 4)),
+    plot.title    = element_text(
+      face = "bold", size = rel(1.08),
+      colour = "black", hjust = 0,
+      margin = margin(b = 3)
+    ),
+    plot.subtitle = element_text(
+      size = rel(0.85), colour = "#444444",
+      hjust = 0, margin = margin(b = 8)
+    ),
+    plot.caption  = element_text(
+      size = rel(0.75), colour = "#666666",
+      hjust = 1, margin = margin(t = 6)
+    ),
+    plot.margin   = margin(14, 16, 10, 12),
+    legend.background  = element_rect(fill = "white", colour = NA),
+    legend.key         = element_rect(fill = "white", colour = NA),
+    legend.key.size    = unit(10, "pt"),
+    legend.text        = element_text(size = rel(0.82)),
+    legend.title       = element_text(face = "bold", size = rel(0.88)),
+    legend.position    = "right",
+    strip.background = element_rect(fill = "#F2F2F2", colour = "black", linewidth = 0.5),
+    strip.text       = element_text(face = "bold", size = rel(0.88))
+  )
+}
+```
+
+## 6.1 Distribuição de STRs por Cromossomo
+
+STRs únicas (por `STR_UID`) por cromossomo e região. A soma de todas as
+células é verificada contra o total de STRs únicas da Seção 5.1 — os
+dois devem bater exatamente, já que ambos usam a mesma deduplicação.
+
+```{r chrom_summary}
+loc_summary <- loc_df |>
+  dplyr::distinct(CHROM, STR_UID, LOCATION) |>
+  dplyr::count(CHROM, LOCATION) |>
+  tidyr::pivot_wider(names_from = LOCATION, values_from = n, values_fill = 0)
+
+# --- Sanity check: total deve bater com o de STRs únicas (5.1) ---
+total_por_chrom  <- sum(dplyr::select(loc_summary, -CHROM))
+total_por_regiao <- sum(region_unique$n_STRs)
+
+cat(sprintf(
+  "Soma loc_summary (por cromossomo): %d | Soma region_unique (5.1): %d | %s\n",
+  total_por_chrom, total_por_regiao,
+  if (total_por_chrom == total_por_regiao) "OK — totais batem" else "DIVERGÊNCIA — investigar"
+))
+
+write.csv(loc_summary, OUT_SUMMARY_CSV, row.names = FALSE)
+cat(sprintf("Salvo: %s\n", OUT_SUMMARY_CSV))
+```
+
+## 6.2 Distribuição por Região
+
+```{r plot_region, fig.width=8, fig.height=5}
+region_unique |>
+  dplyr::mutate(LOCATION = fct_reorder(LOCATION, n_STRs)) |>
+  ggplot(aes(LOCATION, n_STRs, fill = LOCATION)) +
+  geom_col(
+    width = 0.65,
+    show.legend = FALSE,
+    colour = "white",
+    linewidth = 0.25
+  ) +
+  geom_text(
+    aes(label = sprintf("%d  (%.1f%%)", n_STRs, pct * 100)),
+    hjust    = -0.08,
+    size     = 3.1,
+    fontface = "plain",
+    colour   = "black"
+  ) +
+  scale_fill_manual(values = location_pal) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0, 0.22)),
+    labels = scales::comma
+  ) +
+  coord_flip() +
+  labs(
+    title    = "Microsatellites by Genomic Region",
+    subtitle = sprintf(
+      "locateVariants()  \u2022  %d SSRs with ≥ 1 annotation  \u2022  categories not mutually exclusive",
+      dplyr::n_distinct(loc_df$STR_UID)
+    ),
+    x        = NULL,
+    y        = "Number of STRs",
+    caption  = "Regions ordered by ascending count"
+  ) +
+  theme_publication(base_size = 12) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_line(colour = "#E8E8E8", linewidth = 0.35)
+  )
+```
+
+## 6.2.1 Distribuição por região e por motivo de repetição
+
+```{r}
+motif_all_regions <- loc_df |>
+  dplyr::distinct(STR_UID, LOCATION) |>
+  dplyr::left_join(period_df, by = "STR_UID") |>
+  dplyr::filter(!is.na(MOTIF_CLASS)) |>
+  dplyr::count(LOCATION, MOTIF_CLASS, .drop = FALSE, name = "n_STRs") |>
+  dplyr::group_by(LOCATION) |>
+  dplyr::mutate(pct = n_STRs / sum(n_STRs)) |>
+  dplyr::ungroup()
+
+motif_pal <- c(
+  mono   = "#66C2A5",
+  di     = "#FC8D62",
+  tri    = "#8DA0CB",
+  tetra  = "#E78AC3",
+  penta  = "#A6D854",
+  hexa   = "#FFD92F",
+  hepta  = "#E5C494",
+  octa   = "#B3B3B3",
+  nona   = "darkred"
+)
+
+motif_all_regions |>
+  ggplot(aes(MOTIF_CLASS, n_STRs, fill = MOTIF_CLASS)) +
+  geom_col(width = 0.7, colour = "white", linewidth = 0.25) +
+  scale_fill_manual(values = motif_pal, name = "Motif class", drop = FALSE) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.08)), labels = scales::comma) +
+  facet_wrap(~ LOCATION, scales = "free_y", ncol = 3) +
+  labs(
+    title    = "SSRs by Repeat Motif Class, across Genomic Regions",
+    subtitle = "locateVariants() regions \u00d7 HipSTR PERIOD (vcfR-extracted) \u2022 SSRs with ≥ 1 annotation",
+    x = NULL,
+    y = "Number of STRs"
+  ) +
+  theme_publication(base_size = 11) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    axis.text.x         = element_blank(),
+    axis.ticks.x         = element_blank(),
+    strip.text           = element_text(face = "bold"),
+    legend.position       = "right"
+  )
+```
+
+## 6.3 Distribuição Cromossômica
+
+```{r plot_chrom, fig.width=11, fig.height=4.5}
+loc_df |>
+  dplyr::distinct(CHROM, STR_UID, LOCATION) |>
+  dplyr::count(CHROM, LOCATION) |>
+  dplyr::mutate(
+    CHROM    = fct_reorder(CHROM, n, sum, .desc = TRUE),
+    LOCATION = factor(LOCATION, levels = names(location_pal))
+  ) |>
+  ggplot(aes(CHROM, n, fill = LOCATION)) +
+  geom_col(
+    width     = 0.72,
+    colour    = "white",
+    linewidth = 0.25
+  ) +
+  scale_fill_manual(
+    values = location_pal,
+    name   = "Genomic region",
+    guide  = guide_legend(
+      keywidth  = unit(9, "pt"),
+      keyheight = unit(9, "pt"),
+      ncol      = 1
+    )
+  ) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0, 0.05)),
+    labels = scales::comma
+  ) +
+  labs(
+    title   = "SSRs with ≥ 1 annotation by Chromosome and Genomic Region",
+    subtitle = sprintf(
+      "locateVariants()  \u2022  %d SSRs with ≥ 1 annotation  \u2022  categories not mutually exclusive",
+      dplyr::n_distinct(loc_df$STR_UID)
+    ),
+    x       = NULL,
+    y       = "Number of STRs",
+    caption = "Chromosomes ordered by descending total count."
+  ) +
+  theme_publication(base_size = 11) +
+  theme(
+    axis.text.x     = element_text(angle = 45, hjust = 1, vjust = 1),
+    legend.position = "right"
+  )
+```
+
+# 7. Subconjuntos de Interesse
+
+Os subconjuntos abaixo reportam **STRs únicas** (por `STR_UID`) em cada
+categoria — não linhas/anotações brutas, já que uma mesma STR poderia
+aparecer mais de uma vez na mesma categoria caso sobreponha múltiplos
+transcritos daquela região.
+
+```{r subsets}
+subsets <- list(
+  "Promotor + 5'UTR" = loc_df |> filter(LOCATION %in% c("promoter", "fiveUTR")),
+  "Splice Site"      = loc_df |> filter(LOCATION == "spliceSite"),
+  "3' UTR"           = loc_df |> filter(LOCATION == "threeUTR")
+)
+
+n_unique_str <- vapply(subsets, function(df) dplyr::n_distinct(df$STR_UID), integer(1))
+
+cat(paste(
+  sprintf("  %s: %d STRs únicas (%d anotações)",
+          names(subsets), n_unique_str, vapply(subsets, nrow, integer(1))),
+  collapse = "\n"
+))
+```
+
+```{r splice_table}
+splice_unique <- subsets[["Splice Site"]] |>
+  dplyr::distinct(STR_UID, .keep_all = TRUE)
+
+if (nrow(splice_unique) > 0) {
+  kableExtra::kbl(
+    head(splice_unique, 20),
+    caption = "STRs únicas em sítios de splicing (top 20)"
+  ) |>
+    kableExtra::kable_styling(
+      bootstrap_options = c("striped", "hover", "condensed"),
+      full_width = TRUE
+    ) |>
+    kableExtra::row_spec(0, bold = TRUE, background = "#ff7f00", color = "white")
+} else {
+  cat("Nenhum STR em sítio de splicing detectado.\n")
+}
+```
+
+# 8. Exportação
+
+```{r export}
+# TSV completo (todas as anotações — uma linha por STR x transcrito x região)
+readr::write_tsv(loc_df, OUT_TSV)
+
+# Excel com abas por região (também em nível de anotação, não deduplicado)
+region_sheets <- split(loc_df, loc_df$LOCATION)
+region_sheets <- c(list(Todos = loc_df), region_sheets)
+writexl::write_xlsx(region_sheets, OUT_EXCEL)
+
+cat(sprintf(
+  "Exportados:\n  • %s\n  • %s\n  • %s\n  • %s\n",
+  OUT_TSV, OUT_EXCEL, TXDB_FILE, OUT_SUMMARY_CSV
+))
+```
+
+# 9. Tabela Interativa
+
+*Nota: a tabela abaixo exibe anotações brutas (uma linha por STR ×
+transcrito × região). Use o filtro para inspecionar `STR_UID` específico
+caso queira ver todas as anotações de uma mesma STR.*
+
+```{r datatable}
+DT::datatable(
+  loc_df,
+  filter     = "top",
+  extensions = "Buttons",
+  options    = list(
+    pageLength = 20,
+    scrollX    = TRUE,
+    dom        = "Bfrtip",
+    buttons    = c("copy", "csv", "excel")
+  ),
+  caption = sprintf(
+    "STRs por região genômica (anotações brutas) | Promotor: -%d/+%d bp do TSS",
+    PROM_UP, PROM_DOWN
+  )
+)
+```
+
+# 10. Resumo
+
+```{r summary}
+total_str_unique <- dplyr::n_distinct(loc_df$STR_UID)
+total_ann         <- nrow(loc_df)
+
+loc_table_ann    <- sort(table(loc_df$LOCATION), decreasing = TRUE)
+loc_table_unique <- loc_df |>
+  dplyr::distinct(STR_UID, LOCATION) |>
+  dplyr::count(LOCATION, sort = TRUE)
+
+cat(sprintf("
+  RESUMO — LOCALIZAÇÃO GENÔMICA DE STRs
+
+  SSRs with ≥1 annotation : %d
+  Anotações totais     : %d
+  (uma STR pode mapear para múltiplas regiões
+   e/ou gerar múltiplas anotações se sobrepuser
+   mais de um transcrito)
+
+  Intergênico (anotações) : %s
+  Intrônico   (anotações) : %s
+  Intergênico (STRs únicas): %s
+  Intrônico   (STRs únicas): %s
+
+",
+  total_str_unique, total_ann,
+  scales::percent(sum(loc_df$LOCATION == "intergenic") / total_ann, 0.1),
+  scales::percent(sum(loc_df$LOCATION == "intron") / total_ann, 0.1),
+  scales::percent(loc_table_unique$n[loc_table_unique$LOCATION == "intergenic"] / total_str_unique, 0.1),
+  scales::percent(loc_table_unique$n[loc_table_unique$LOCATION == "intron"] / total_str_unique, 0.1)
+))
+
+cat("\n Distribuição de ANOTAÇÕES \n")
+print(loc_table_ann)
+
+cat("\n Distribuição de STRs \n")
+print(loc_table_unique)
+```
