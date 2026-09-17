@@ -6,93 +6,93 @@ The repository is intended to support the reproducibility of the analyses presen
 
 ---
 
-## Pipeline de Caracterização de SSRs em *Dipteryx alata* (Baruzeiro)
+## SSR Characterization Pipeline for *Dipteryx alata*
 
-### Visão Geral
+### Overview
 
-Este pipeline realiza a identificação, genotipagem *in silico* e caracterização de marcadores microssatélites (SSRs) a partir de dados de sequenciamento de baixa cobertura (*low-coverage whole-genome sequencing*, lcWGS) de *Dipteryx alata* (baruzeiro), espécie nativa do Cerrado.
+This pipeline performs the identification, *in silico* genotyping, and characterization of microsatellite markers (SSRs) from low-coverage whole-genome sequencing (lcWGS) data for *Dipteryx alata* (baru tree), a species native to the Brazilian Cerrado.
 
-O trabalho compõe o Capítulo 1 de uma dissertação de mestrado organizada em formato de artigos, com foco na caracterização de recursos genômicos para a espécie.
+This work forms Chapter 1 of a master's dissertation organized as a collection of articles, focusing on the characterization of genomic resources for this species.
 
-O fluxo integra quatro ferramentas principais — **TRF**, **HipSTR**, **TRTools** e **VariantAnnotation** — cada uma responsável por uma etapa distinta do processo: descoberta estrutural de repetições, genotipagem empírica a partir de dados de sequenciamento, filtragem e geração de estatísticas pós-genotipagem e localização genômica dos loci.
-
----
-
-## Dados de Entrada
-
-Os dados utilizados no pipeline consistem em:
-
-* Dados de sequenciamento *whole-genome* de baixa cobertura (lcWGS), com aproximadamente 9–14× de cobertura;
-* 24 indivíduos de *Dipteryx alata*;
-* Dados previamente processados pelo pipeline **RIG** (*Recalibration and Interrelation of Genomic Sequence Data with the GATK*), a partir de arquivos FASTQ brutos;
-* Metadados de *read groups* incorporados durante o processamento dos dados, utilizando `bwa mem -R`.
-
-Os dados brutos de sequenciamento e outros arquivos de grande porte não são incluídos diretamente neste repositório. Quando aplicável, sua disponibilidade e respectivos identificadores de acesso são descritos na seção **Data Availability**.
+The workflow integrates four main tools — **TRF**, **HipSTR**, **TRTools**, and **VariantAnnotation** — each responsible for a distinct stage: structural repeat discovery, empirical genotyping from sequencing data, filtering and post-genotyping statistics, and genomic localization of the loci.
 
 ---
 
-## Estrutura Conceitual: Três Datasets
+## Input Data
 
-O pipeline gera três datasets que representam diferentes camadas analíticas, unificadas pelo conceito de **viés de ascertainment (ascertainment bias)**. Cada camada incorpora uma nova fonte potencial de viés cumulativo.
+The pipeline uses the following data:
 
-| Dataset               | Descrição                                                                         | Fonte de viés                                        |
+* Whole-genome sequencing (WGS) data, with approximately 9–14× coverage;
+* 24 *Dipteryx alata* individuals;
+* Data previously processed through quality control using FastQC and adapter/quality trimming with fastp from raw FASTQ files;
+* Read-group metadata added during alignment using `bwa mem -R`, followed by read sorting with samtools and duplicate marking with Picard MarkDuplicates.
+
+Raw sequencing data and other large files are not included directly in this repository. Their availability and corresponding access identifiers are documented in the **Data Availability** section and in [data/README.md](data/README.md).
+
+---
+
+## Conceptual Structure: Three Datasets
+
+The pipeline generates three datasets representing different analytical layers, unified by the concept of **ascertainment bias**. Each layer incorporates a new potential source of cumulative bias.
+
+| Dataset               | Description                                                                       | Source of bias                                       |
 | --------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| **1. Descoberta**     | Repetições identificadas estruturalmente no genoma de referência                  | Viés de detecção estrutural, inerente ao TRF         |
-| **2. Genotipagem**    | Loci efetivamente genotipados nos indivíduos sequenciados                         | Viés de detecção estrutural + viés de amostragem     |
-| **3. Alta confiança** | Loci genotipados que atendem aos critérios de qualidade e cobertura estabelecidos | Viés de detecção estrutural + amostragem + cobertura |
+| **1. Discovery**      | Repeats structurally identified in the reference genome                           | Structural detection bias inherent to TRF            |
+| **2. Genotyping**     | Loci effectively genotyped in the sequenced individuals                           | Structural detection bias + sampling bias            |
+| **3. High confidence**| Genotyped loci meeting the established quality and coverage criteria              | Structural detection bias + sampling + coverage     |
 
-Essa estrutura em camadas representa, respectivamente, o **potencial estrutural**, a **detectabilidade empírica** e a **robustez aplicada** dos marcadores identificados.
-
----
-
-## Etapas do Pipeline
-
-### 1. Descoberta de repetições — TRF
-
-Identificação exploratória de regiões repetitivas no genoma de referência utilizando **Tandem Repeats Finder (TRF)**.
-
-As informações de *copy number*, período e demais características dos arrays são obtidas como resultados do algoritmo e não representam parâmetros de busca direcionada.
-
-### 2. Extração e tratamento das coordenadas — BED
-
-Conversão e tratamento das coordenadas dos loci identificados para o formato BED, considerando adequadamente a diferença entre sistemas de coordenadas.
-
-Essa etapa permite a obtenção das características dos arrays mantendo a distinção entre **comprimento total do array**, **período do motivo** e **número de cópias**.
-
-### 3. Genotipagem *in silico* — HipSTR
-
-Genotipagem dos loci identificados diretamente a partir dos dados de lcWGS dos 24 indivíduos utilizando **HipSTR**.
-
-A etapa produz os genótipos dos loci SSR identificados no genoma de referência e constitui a base para as análises posteriores de filtragem e caracterização.
-
-### 4. Filtragem e estatísticas — TRTools
-
-Processamento dos resultados de genotipagem utilizando **TRTools**, incluindo filtragem dos loci, processamento dos arquivos de variantes e geração de estatísticas descritivas.
-
-Essa etapa resulta na definição do dataset de alta confiança e na caracterização dos loci de acordo com suas respectivas classes de motivo.
-
-### 5. Localização genômica — VariantAnnotation
-
-Anotação dos loci utilizando **VariantAnnotation** (Bioconductor/R), permitindo a classificação de acordo com sua localização genômica, incluindo regiões gênicas e intergênicas. Esta etapa não infere efeitos proteicos ou frameshifts.
-
-Essa classificação auxilia na interpretação do potencial de aplicação dos marcadores em estudos posteriores, incluindo análises de diversidade, genética populacional, neutralidade e possíveis associações com características fenotípicas.
+This layered structure represents the **structural potential**, **empirical detectability**, and **applied robustness** of the identified markers, respectively.
 
 ---
 
-## Ferramentas Utilizadas
+## Pipeline Stages
 
-| Ferramenta                      | Função                                                         |
+### 1. Repeat Discovery — TRF
+
+Exploratory identification of repetitive regions in the reference genome using **Tandem Repeats Finder (TRF)**.
+
+Copy number, period, and other array characteristics are obtained as algorithm outputs and do not represent targeted search parameters.
+
+### 2. Coordinate Extraction and Processing — BED
+
+Conversion and processing of the identified loci coordinates into BED format, accounting for the difference between coordinate systems.
+
+This stage preserves the distinction between **total array length**, **motif period**, and **copy number**.
+
+### 3. *In Silico* Genotyping — HipSTR
+
+The identified loci are genotyped directly from the 24 individuals' lcWGS data using **HipSTR**.
+
+This stage produces genotypes for the SSR loci identified in the reference genome and provides the basis for subsequent filtering and characterization analyses.
+
+### 4. Filtering and Statistics — TRTools
+
+Genotyping results are processed using **TRTools**, including locus filtering, variant-file processing, and generation of descriptive statistics.
+
+This stage defines the high-confidence dataset and characterizes the loci according to their respective motif classes.
+
+### 5. Genomic Localization — VariantAnnotation
+
+The loci are annotated using **VariantAnnotation** (Bioconductor/R) and classified according to their genomic location, including genic and intergenic regions. This stage does not infer protein effects or frameshifts.
+
+This classification supports the interpretation of the markers' potential applications in subsequent studies, including diversity, population genetics, neutrality, and possible phenotype-association analyses.
+
+---
+
+## Tools Used
+
+| Tool                            | Function                                                       |
 | ------------------------------- | -------------------------------------------------------------- |
-| **TRF (Tandem Repeats Finder)** | Identificação estrutural de regiões repetitivas                |
-| **HipSTR**                      | Genotipagem de STRs a partir de dados de sequenciamento        |
-| **TRTools**                     | Filtragem, conversão e análise estatística de STRs genotipados |
-| **VariantAnnotation**           | Anotação e manipulação de variantes no ambiente Bioconductor/R |
+| **TRF (Tandem Repeats Finder)** | Structural identification of repetitive regions                |
+| **HipSTR**                      | STR genotyping from sequencing data                            |
+| **TRTools**                     | Filtering, conversion, and statistical analysis of genotyped STRs |
+| **VariantAnnotation**           | Variant annotation and manipulation in Bioconductor/R          |
 
-As versões específicas das ferramentas e dos pacotes utilizados são apresentadas no diretório `environment/`.
+Specific versions of the tools and packages used are listed in the `environment/` directory.
 
 ---
 
-## Estrutura do Repositório
+## Repository Structure
 
 ```text
 hipstr-dalata-project/
@@ -118,27 +118,27 @@ hipstr-dalata-project/
 │   └── README.md
 ```
 
-### Descrição dos diretórios
+### Directory Description
 
-* `scripts/pipeline/` — notebook principal do pipeline de descoberta, genotipagem e filtragem;
-* `scripts/R_scripts/` — análises descritivas e localização genômica em R Markdown;
-* `data/` — links e metadados dos arquivos externos necessários para execução;
-* `results/` — resultados tabulares selecionados;
-* `environment/` — informações sobre versões de ferramentas, pacotes e dependências.
+* `scripts/pipeline/` — main notebook for discovery, genotyping, and filtering;
+* `scripts/R_scripts/` — descriptive analyses and genomic localization in R Markdown;
+* `data/` — links and metadata for the external files required for execution;
+* `results/` — selected tabular results;
+* `environment/` — information about tool, package, and dependency versions.
 
-Arquivos de grande porte, como FASTQ, BAM e VCF completos, não são armazenados diretamente neste repositório.
+Large files, such as FASTQ, BAM, and complete VCF files, are not stored directly in this repository.
 
 ---
 
 ## Reprodutibilidade
 
-Os scripts disponibilizados neste repositório correspondem às etapas computacionais utilizadas para gerar os resultados apresentados no manuscrito.
+The scripts provided in this repository correspond to the computational stages used to generate the results presented in the manuscript.
 
-Sempre que possível, os parâmetros utilizados nas análises são especificados diretamente nos scripts ou em arquivos de configuração associados.
+Whenever possible, the analysis parameters are specified directly in the scripts or in associated configuration files.
 
-As versões das ferramentas e dos pacotes utilizados são documentadas no diretório `environment/`.
+The versions of the tools and packages used are documented in the `environment/` directory.
 
-A relação entre scripts, arquivos de entrada e resultados será indicada ao longo da documentação para facilitar a reprodução das análises.
+The relationship between scripts, input files, and results is documented throughout the repository to facilitate reproduction of the analyses.
 
 ---
 
@@ -146,7 +146,7 @@ A relação entre scripts, arquivos de entrada e resultados será indicada ao lo
 
 Raw sequencing data and other large input files are not included in this repository.
 
-Links para os dados de sequenciamento, genoma de referência, arquivos de anotação e outros recursos externos estão registrados em [data/README.md](data/README.md), junto com os nomes esperados pelos scripts.
+Links to the sequencing data, reference genome, annotation files, and other external resources are listed in [data/README.md](data/README.md), together with the filenames expected by the scripts.
 
 ---
 
