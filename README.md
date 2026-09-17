@@ -1,5 +1,3 @@
-# hipstr-dalata-project
-
 This repository contains the scripts, workflows, supporting files, and data analysis used for the in silico genotyping and characterization of Simple Sequence Repeats (SSRs) from whole-genome sequencing (WGS) data for the manuscript:
 
 **In silico genome-wide identification and characterization of microsatellite loci in baru tree (*Dipteryx alata*) using resequencing whole genome sequencing data**
