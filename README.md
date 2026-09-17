@@ -16,7 +16,7 @@ Este pipeline realiza a identificação, genotipagem *in silico* e caracterizaç
 
 O trabalho compõe o Capítulo 1 de uma dissertação de mestrado organizada em formato de artigos, com foco na caracterização de recursos genômicos para a espécie.
 
-O fluxo integra quatro ferramentas principais — **TRF**, **HipSTR**, **TRTools** e **VariantAnnotation** — cada uma responsável por uma etapa distinta do processo: descoberta estrutural de repetições, genotipagem empírica a partir de dados de sequenciamento, filtragem e geração de estatísticas pós-genotipagem e anotação funcional das variantes.
+O fluxo integra quatro ferramentas principais — **TRF**, **HipSTR**, **TRTools** e **VariantAnnotation** — cada uma responsável por uma etapa distinta do processo: descoberta estrutural de repetições, genotipagem empírica a partir de dados de sequenciamento, filtragem e geração de estatísticas pós-genotipagem e localização genômica dos loci.
 
 ---
 
@@ -73,9 +73,9 @@ Processamento dos resultados de genotipagem utilizando **TRTools**, incluindo fi
 
 Essa etapa resulta na definição do dataset de alta confiança e na caracterização dos loci de acordo com suas respectivas classes de motivo.
 
-### 5. Anotação funcional — VariantAnnotation
+### 5. Localização genômica — VariantAnnotation
 
-Anotação das variantes utilizando **VariantAnnotation** (Bioconductor/R), permitindo a classificação dos loci de acordo com sua localização genômica, incluindo regiões gênicas e intergênicas.
+Anotação dos loci utilizando **VariantAnnotation** (Bioconductor/R), permitindo a classificação de acordo com sua localização genômica, incluindo regiões gênicas e intergênicas. Esta etapa não infere efeitos proteicos ou frameshifts.
 
 Essa classificação auxilia na interpretação do potencial de aplicação dos marcadores em estudos posteriores, incluindo análises de diversidade, genética populacional, neutralidade e possíveis associações com características fenotípicas.
 
@@ -104,36 +104,29 @@ hipstr-dalata-project/
 ├── .gitignore
 │
 ├── scripts/
-│   ├── 01_trf/
-│   ├── 02_coordinates/
-│   ├── 03_hipstr/
-│   ├── 04_trtools/
-│   └── 05_annotation/
+│   ├── pipeline/
+│   │   ├── README.md
+│   │   └── ssr_pipeline.ipynb
+│   └── R_scripts/
+│       ├── README.md
+│       └── *.Rmd
 │
 ├── data/
 │   └── README.md
 │
-├── results/
-│   └── README.md
-│
-├── figures/
+├── results/*.csv
 │
 ├── environment/
-│   ├── environment.yml
-│   └── versions.txt
-│
-└── docs/
-    └── workflow.md
+│   └── README.md
 ```
 
 ### Descrição dos diretórios
 
-* `scripts/` — scripts utilizados nas diferentes etapas do pipeline;
-* `data/` — arquivos de entrada ou exemplos necessários para execução dos scripts;
-* `results/` — resultados selecionados das análises;
-* `figures/` — figuras geradas a partir dos resultados;
-* `environment/` — informações sobre versões de ferramentas, pacotes e dependências;
-* `docs/` — documentação complementar sobre o fluxo de análise.
+* `scripts/pipeline/` — notebook principal do pipeline de descoberta, genotipagem e filtragem;
+* `scripts/R_scripts/` — análises descritivas e localização genômica em R Markdown;
+* `data/` — links e metadados dos arquivos externos necessários para execução;
+* `results/` — resultados tabulares selecionados;
+* `environment/` — informações sobre versões de ferramentas, pacotes e dependências.
 
 Arquivos de grande porte, como FASTQ, BAM e VCF completos, não são armazenados diretamente neste repositório.
 
@@ -155,7 +148,7 @@ A relação entre scripts, arquivos de entrada e resultados será indicada ao lo
 
 Raw sequencing data and other large input files are not included in this repository.
 
-The availability of the original sequencing data, genome reference, annotation files, and other external resources is described in the manuscript and/or in the corresponding repository documentation.
+Links para os dados de sequenciamento, genoma de referência, arquivos de anotação e outros recursos externos estão registrados em [data/README.md](data/README.md), junto com os nomes esperados pelos scripts.
 
 ---
 
@@ -173,7 +166,7 @@ The scripts developed for this project are distributed under the **MIT License**
 
 Third-party software, reference genomes, annotation files, databases, and other externally sourced resources are subject to their respective licenses and terms of use.
 
-See the `LICENSE` file for details.
+See the `LICENSE` file for details when the license is added to the repository.
 
 ---
 
