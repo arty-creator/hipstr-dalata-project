@@ -357,6 +357,17 @@ cat("Files generated:\n",
     "  d2_stats_por_loco.csv\n",
     "  d2_stats_por_amostra.csv\n",
     "  d2_callrate_por_loco.csv\n")
+
+info_df <- info_df %>%
+  mutate(
+    ALT = vcf@fix[, "ALT"],
+    POLIMORFICO = ifelse(is.na(ALT) | ALT == ".", "Monomorphic", "Polimorphic"),
+    N_ALT = ifelse(POLIMORFICO == "Monomorphic", 0, str_count(ALT, ",") + 1),
+    N_ALLELES = N_ALT + 1
+  )
+
+cat("Polimorphic loci:", sum(info_df$POLIMORFICO == "Polimorphic"),
+    "| Monomorphic loci:", sum(info_df$POLIMORFICO == "Monomorphic"), "\n")
 ```
 
 ## D2-13. Figure 1 — DP and call rate composition by sample
