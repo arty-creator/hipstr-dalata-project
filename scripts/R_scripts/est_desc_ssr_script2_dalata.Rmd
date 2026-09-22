@@ -357,17 +357,73 @@ cat("Files generated:\n",
     "  d2_stats_por_loco.csv\n",
     "  d2_stats_por_amostra.csv\n",
     "  d2_callrate_por_loco.csv\n")
+```
 
-info_df <- info_df %>%
+## D3-12.1. Chromosome/Moritf export
+
+```{r d3_exportar_chrom_motif}
+# Reference allele length and copy number per locus
+locus_info <- info_df %>%
   mutate(
-    ALT = vcf@fix[, "ALT"],
-    POLIMORFICO = ifelse(is.na(ALT) | ALT == ".", "Monomorphic", "Polimorphic"),
-    N_ALT = ifelse(POLIMORFICO == "Monomorphic", 0, str_count(ALT, ",") + 1),
-    N_ALLELES = N_ALT + 1
+    REF_len     = nchar(vcf@fix[, "REF"]),
+    Copy_number = REF_len / PERIOD,
+    Classe = case_when(
+      PERIOD == 1 ~ "Mono",
+      PERIOD == 2 ~ "Di",
+      PERIOD == 3 ~ "Tri",
+      PERIOD == 4 ~ "Tetra",
+      PERIOD == 5 ~ "Penta",
+      PERIOD == 6 ~ "Hexa",
+      PERIOD == 7 ~ "Hepta",
+      PERIOD == 8 ~ "Octa",
+      PERIOD == 9 ~ "Nona",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  select(Loco, CHROM, PERIOD, Classe, REF_len, Copy_number)
+
+# Number of distinct alleles per locus (defines polymorphism)
+alelos_por_loco <- gb_long %>%
+  group_by(Loco) %>%
+  summarise(n_alelos = n_distinct(bp_diff), .groups = "drop") %>%
+  mutate(Polimorfico = n_alelos > 1)
+
+locus_info <- locus_info %>%
+  left_join(alelos_por_loco, by = "Loco") %>%
+  mutate(Polimorfico = ifelse(is.na(Polimorfico), FALSE, Polimorfico))
+
+# Count by repeat class (Mono...Nona), per chromosome
+classe_wide <- locus_info %>%
+  count(CHROM, Classe) %>%
+  pivot_wider(names_from = Classe, values_from = n, values_fill = 0)
+
+# Final table aggregated by chromosome
+tabela_ssr_cromossomo <- locus_info %>%
+  group_by(CHROM) %>%
+  summarise(
+    No_of_SSRs          = n(),
+    Total_SSR_length_bp = sum(REF_len, na.rm = TRUE),
+    Mean_copy_number    = round(mean(Copy_number, na.rm = TRUE), 2),
+    No_polymorphic_SSRs = sum(Polimorfico, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  left_join(classe_wide, by = "CHROM") %>%
+  left_join(chr_sizes, by = c("CHROM" = "Chromosome")) %>%
+  mutate(
+    SSRs_per_Mb             = round(No_of_SSRs / (Chr_size_bp / 1e6), 2),
+    Pct_chr_in_SSRs         = round(Total_SSR_length_bp / Chr_size_bp * 100, 4),
+    Polymorphic_SSRs_per_Mb = round(No_polymorphic_SSRs / (Chr_size_bp / 1e6), 2)
+  ) %>%
+  rename(Chromosome = CHROM) %>%
+  select(
+    Chromosome, Chr_size_bp, No_of_SSRs, SSRs_per_Mb,
+    any_of(c("Mono","Di","Tri","Tetra","Penta","Hexa","Hepta","Octa","Nona")),
+    Total_SSR_length_bp, Pct_chr_in_SSRs, Mean_copy_number,
+    No_polymorphic_SSRs, Polymorphic_SSRs_per_Mb
   )
 
-cat("Polimorphic loci:", sum(info_df$POLIMORFICO == "Polimorphic"),
-    "| Monomorphic loci:", sum(info_df$POLIMORFICO == "Monomorphic"), "\n")
+knitr::kable(tabela_ssr_cromossomo, digits = 4)
+write_csv(tabela_ssr_cromossomo, "d2_ssr_summary_chromosome.csv")
 ```
 
 ## D2-13. Figure 1 — DP and call rate composition by sample
@@ -1213,6 +1269,73 @@ cat("Files generated:\n",
     "  d3_stats_por_loco.csv\n",
     "  d3_stats_por_amostra.csv\n",
     "  d3_distribuicao_filtros.csv\n")
+```
+
+## D3-12.1. Chromosome/Moritf export
+
+```{r d3_exportar_chrom_motif}
+# Reference allele length and copy number per locus
+locus_info <- info_df %>%
+  mutate(
+    REF_len     = nchar(vcf@fix[, "REF"]),
+    Copy_number = REF_len / PERIOD,
+    Classe = case_when(
+      PERIOD == 1 ~ "Mono",
+      PERIOD == 2 ~ "Di",
+      PERIOD == 3 ~ "Tri",
+      PERIOD == 4 ~ "Tetra",
+      PERIOD == 5 ~ "Penta",
+      PERIOD == 6 ~ "Hexa",
+      PERIOD == 7 ~ "Hepta",
+      PERIOD == 8 ~ "Octa",
+      PERIOD == 9 ~ "Nona",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  select(Loco, CHROM, PERIOD, Classe, REF_len, Copy_number)
+
+# Number of distinct alleles per locus (defines polymorphism)
+alelos_por_loco <- gb_long %>%
+  group_by(Loco) %>%
+  summarise(n_alelos = n_distinct(bp_diff), .groups = "drop") %>%
+  mutate(Polimorfico = n_alelos > 1)
+
+locus_info <- locus_info %>%
+  left_join(alelos_por_loco, by = "Loco") %>%
+  mutate(Polimorfico = ifelse(is.na(Polimorfico), FALSE, Polimorfico))
+
+# Count by repeat class (Mono...Nona), per chromosome
+classe_wide <- locus_info %>%
+  count(CHROM, Classe) %>%
+  pivot_wider(names_from = Classe, values_from = n, values_fill = 0)
+
+# Final table aggregated by chromosome
+tabela_ssr_cromossomo <- locus_info %>%
+  group_by(CHROM) %>%
+  summarise(
+    No_of_SSRs          = n(),
+    Total_SSR_length_bp = sum(REF_len, na.rm = TRUE),
+    Mean_copy_number    = round(mean(Copy_number, na.rm = TRUE), 2),
+    No_polymorphic_SSRs = sum(Polimorfico, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  left_join(classe_wide, by = "CHROM") %>%
+  left_join(chr_sizes, by = c("CHROM" = "Chromosome")) %>%
+  mutate(
+    SSRs_per_Mb             = round(No_of_SSRs / (Chr_size_bp / 1e6), 2),
+    Pct_chr_in_SSRs         = round(Total_SSR_length_bp / Chr_size_bp * 100, 4),
+    Polymorphic_SSRs_per_Mb = round(No_polymorphic_SSRs / (Chr_size_bp / 1e6), 2)
+  ) %>%
+  rename(Chromosome = CHROM) %>%
+  select(
+    Chromosome, Chr_size_bp, No_of_SSRs, SSRs_per_Mb,
+    any_of(c("Mono","Di","Tri","Tetra","Penta","Hexa","Hepta","Octa","Nona")),
+    Total_SSR_length_bp, Pct_chr_in_SSRs, Mean_copy_number,
+    No_polymorphic_SSRs, Polymorphic_SSRs_per_Mb
+  )
+
+knitr::kable(tabela_ssr_cromossomo, digits = 4)
+write_csv(tabela_ssr_cromossomo, "d3_ssr_summary_chromosome.csv")
 ```
 
 ## D3-13. Figure 1 — Filters by sample
