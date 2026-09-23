@@ -130,7 +130,7 @@ Large files, such as FASTQ, BAM, and complete VCF files, are not stored directly
 
 ---
 
-## Reprodutibilidade
+## Reproducibility
 
 The scripts provided in this repository correspond to the computational stages used to generate the results presented in the manuscript.
 
