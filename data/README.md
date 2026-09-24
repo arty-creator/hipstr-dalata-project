@@ -5,12 +5,12 @@ Os arquivos grandes usados pelo pipeline não são versionados neste repositóri
 ## Recursos necessários
 
 | Recurso | Arquivo esperado | Link de acesso |
-|---|---|---|---|
+|---|---|---|
 | Leituras paired-end | `*_R1_001.fastq.gz`, `*_R2_001.fastq.gz` | A preencher |
-| Genoma de referência | `genome.fasta` e índice `.fai` | A preencher 
-| Anotação gênica | `mikado.loci.clean.step2.primaryTranscripts.gff3` | A preencher | 
-| VCF Dataset 2 | `hipstr_trf_v2_filtered.vcf` | A preencher | 
-| VCF Dataset 3 | `hipstr_post_dumpstr_filtered_trf.vcf` | A preencher | 
+| Genoma de referência | `genome.fasta` e índice `.fai` | A preencher |
+| Anotação gênica | `mikado.loci.clean.step2.primaryTranscripts.gff3` | A preencher |
+| VCF Dataset 2 | `hipstr_trf_v2_filtered.vcf` | A preencher |
+| VCF Dataset 3 | `hipstr_post_dumpstr_filtered_trf.vcf` | A preencher |
 
 Os links devem apontar para uma fonte estável e, quando disponível, incluir accession, DOI ou identificador equivalente. Registre também o checksum dos arquivos para permitir a conferência da versão utilizada no artigo.
 
