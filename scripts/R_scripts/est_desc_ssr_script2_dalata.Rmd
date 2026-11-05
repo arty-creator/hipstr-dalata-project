@@ -359,74 +359,7 @@ cat("Files generated:\n",
     "  d2_callrate_por_loco.csv\n")
 ```
 
-## D3-12.1. Chromosome/Moritf export
-
-```{r d3_exportar_chrom_motif}
-# Reference allele length and copy number per locus
-locus_info <- info_df %>%
-  mutate(
-    REF_len     = nchar(vcf@fix[, "REF"]),
-    Copy_number = REF_len / PERIOD,
-    Classe = case_when(
-      PERIOD == 1 ~ "Mono",
-      PERIOD == 2 ~ "Di",
-      PERIOD == 3 ~ "Tri",
-      PERIOD == 4 ~ "Tetra",
-      PERIOD == 5 ~ "Penta",
-      PERIOD == 6 ~ "Hexa",
-      PERIOD == 7 ~ "Hepta",
-      PERIOD == 8 ~ "Octa",
-      PERIOD == 9 ~ "Nona",
-      TRUE ~ NA_character_
-    )
-  ) %>%
-  select(Loco, CHROM, PERIOD, Classe, REF_len, Copy_number)
-
-# Number of distinct alleles per locus (defines polymorphism)
-alelos_por_loco <- gb_long %>%
-  group_by(Loco) %>%
-  summarise(n_alelos = n_distinct(bp_diff), .groups = "drop") %>%
-  mutate(Polimorfico = n_alelos > 1)
-
-locus_info <- locus_info %>%
-  left_join(alelos_por_loco, by = "Loco") %>%
-  mutate(Polimorfico = ifelse(is.na(Polimorfico), FALSE, Polimorfico))
-
-# Count by repeat class (Mono...Nona), per chromosome
-classe_wide <- locus_info %>%
-  count(CHROM, Classe) %>%
-  pivot_wider(names_from = Classe, values_from = n, values_fill = 0)
-
-# Final table aggregated by chromosome
-tabela_ssr_cromossomo <- locus_info %>%
-  group_by(CHROM) %>%
-  summarise(
-    No_of_SSRs          = n(),
-    Total_SSR_length_bp = sum(REF_len, na.rm = TRUE),
-    Mean_copy_number    = round(mean(Copy_number, na.rm = TRUE), 2),
-    No_polymorphic_SSRs = sum(Polimorfico, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  left_join(classe_wide, by = "CHROM") %>%
-  left_join(chr_sizes, by = c("CHROM" = "Chromosome")) %>%
-  mutate(
-    SSRs_per_Mb             = round(No_of_SSRs / (Chr_size_bp / 1e6), 2),
-    Pct_chr_in_SSRs         = round(Total_SSR_length_bp / Chr_size_bp * 100, 4),
-    Polymorphic_SSRs_per_Mb = round(No_polymorphic_SSRs / (Chr_size_bp / 1e6), 2)
-  ) %>%
-  rename(Chromosome = CHROM) %>%
-  select(
-    Chromosome, Chr_size_bp, No_of_SSRs, SSRs_per_Mb,
-    any_of(c("Mono","Di","Tri","Tetra","Penta","Hexa","Hepta","Octa","Nona")),
-    Total_SSR_length_bp, Pct_chr_in_SSRs, Mean_copy_number,
-    No_polymorphic_SSRs, Polymorphic_SSRs_per_Mb
-  )
-
-knitr::kable(tabela_ssr_cromossomo, digits = 4)
-write_csv(tabela_ssr_cromossomo, "d2_ssr_summary_chromosome.csv")
-```
-
-## D2-13. Figure 1 — DP and call rate composition by sample
+## D2-13. Figure 1 — DP and composition by sample
 
 ```{r d2_fig1, fig.width=10, fig.height=10}
 # Depth categories
@@ -496,7 +429,7 @@ p1b <- callrate_amostra %>%
   scale_x_continuous(labels = label_percent(scale = 1),
                      limits = c(0, 100)) +
   labs(
-    title    = "B  Call rate by sample",
+    title    = "B  Proportion of loci genotyped by sample",
     subtitle = "Proportion of loci with a called GT; dashed line = 70%",
     x        = "% of called loci",
     y        = NULL
@@ -733,7 +666,17 @@ p5a <- gb_long %>%
 
 p5b <- gb_long %>%
   filter(PERIOD >= 2, PERIOD <= 9) %>%
-  mutate(PERIOD_lab = paste0("PERIOD = ", PERIOD, " bp")) %>%
+  mutate(PERIOD_lab = factor(recode(as.character(PERIOD),
+      "2" = "Di-",
+      "3" = "Tri-",
+      "4" = "Tetra-",
+      "5" = "Penta-",
+      "6" = "Hexa-",
+      "7" = "Hepta-",
+      "8" = "Octa-",
+      "9" = "Nona-"),
+    levels = c("Di-", "Tri-", "Tetra-", "Penta-",
+               "Hexa-", "Hepta-", "Octa-", "Nona-"))) %>%
   ggplot(aes(x = bp_diff,
              y = fct_rev(factor(PERIOD_lab)),
              fill = factor(PERIOD))) +
@@ -778,238 +721,36 @@ dp_chr <- as.data.frame(dp_mat) %>%
 
 fig7_d2 <- dp_chr %>%
   mutate(
-    CHROM   = factor(CHROM, levels = paste0("Dal_0", 1:8)),
+    CHROM = factor(CHROM, levels = paste0("Dal_0", 1:8)),
     Amostra = reorder(Amostra, DP_mean)
   ) %>%
+  mutate(
+  cor_texto = ifelse(
+    as.integer(Amostra) <= nlevels(Amostra) / 2,
+    "black", "white"
+  )
+) %>%
   ggplot(aes(x = CHROM, y = Amostra, fill = DP_mean)) +
   geom_tile(color = "white", linewidth = 0.3) +
   scale_fill_gradientn(
     colors = c("#f7fbff", "#c6dbef", "#6baed6", "#2171b5", "#08306b"),
-    name   = "Mean DP"
+    name = "Mean DP"
   ) +
-  geom_text(aes(label = round(DP_mean, 1)), size = 2.5, color = "white") +
+  geom_text(
+    aes(label = round(DP_mean, 1), color = cor_texto),
+    size = 2.5
+  ) +
+  scale_color_identity() +
   labs(
-    title    = "Mean read depth (DP) by sample × chromosome",
+    title = "Mean read depth (DP) by sample × chromosome",
     subtitle = "Called genotypes on main chromosomes (Dal_01–Dal_08)",
-    x        = "Chromosome",
-    y        = "Sample"
+    x = "Chromosome",
+    y = "Sample"
   ) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1))
 
 fig7_d2
 ```
-## D2-19. Physical map and locus density by motif type
-
-```{r d2_fig_genomic_maps_motif, fig.width=16, fig.height=10}
-# Load chromosome sizes
-chrom_sizes <- read_tsv("chromosome_sizes.txt", 
-                        col_names = c("chr", "size_bp"), 
-                        show_col_types = FALSE)
-
-total_chrom_size_bp <- sum(chrom_sizes$size_bp)
-
-# DIAGNOSTICS
-cat("=== DIAGNOSTICS D2 ===\n")
-cat("Total loci in VCF:", n_locos, "\n")
-cat("PERIOD extracted (non-NA):", sum(!is.na(info_df$PERIOD)), "\n")
-cat("PERIOD with NA:", sum(is.na(info_df$PERIOD)), "\n\n")
-
-# PERIOD sample
-cat("Sample of extracted PERIOD values:\n")
-print(head(info_df$PERIOD, 20))
-
-# Prepare data with PERIOD - KEEP ALL LOCI
-map_data <- tibble(
-  locus = loco_ids,
-  chr = vcf@fix[, "CHROM"],
-  pos = as.numeric(vcf@fix[, "POS"]),
-  position_mb = pos / 1e6,
-  period = info_df$PERIOD
-) %>%
-  filter(!is.na(pos)) %>%  # Keep everything except invalid POS
-  mutate(
-    # Se PERIOD for NA, usar 0 como "unknown"
-    period = ifelse(is.na(period), 0, period),
-    motif_class = case_when(
-      period == 0 ~ "Unknown",
-      period == 1 ~ "Mono",
-      period == 2 ~ "Di",
-      period == 3 ~ "Tri",
-      period == 4 ~ "Tetra",
-      period == 5 ~ "Penta",
-      period == 6 ~ "Hexa",
-      period == 7 ~ "Hepta",
-      period == 8 ~ "Octa",
-      period == 9 ~ "Nona",
-      TRUE ~ "Other"
-    ),
-    motif_class = factor(motif_class, 
-                         levels = c("Mono", "Di", "Tri", "Tetra", "Penta", 
-                                   "Hexa", "Hepta", "Octa", "Nona", "Unknown", "Other"))
-  )
-
-chrom_plot_data <- chrom_sizes %>%
-  mutate(size_mb = size_bp / 1e6, chr = as.character(chr)) %>%
-  filter(chr %in% unique(map_data$chr))
-
-cat("Final loci on map:", nrow(map_data), "\n\n")
-
-# Okabe-Ito palette for motifs (with Unknown)
-motif_colors <- c(
-  "Mono"  = "#56B4E9", "Di"    = "#0072B2", "Tri"   = "#009E73",
-  "Tetra" = "#F0E442", "Penta" = "#E69F00", "Hexa"  = "#D55E00",
-  "Hepta" = "#CC79A7", "Octa"  = "#999999", "Nona"  = "#2C2C2A",
-  "Unknown" = "#DDDDDD", "Other" = "#CCCCCC"
-)
-
-# Legend with counts
-motif_counts <- map_data %>%
-  count(motif_class, name = "n") %>%
-  mutate(
-    pct = round((n / sum(n)) * 100, 1),
-    label = paste0(motif_class, " (n=", format(n, big.mark = ","), 
-                   ", ", pct, "%)")
-  )
-
-legend_labels <- setNames(motif_counts$label, motif_counts$motif_class)
-
-cat("Distribution by motif:\n")
-print(motif_counts)
-
-# ---- PLOT 1: Physical Map by Motif ----
-physical_map <- ggplot() +
-  geom_rect(
-    data = chrom_plot_data,
-    aes(xmin = as.numeric(factor(chr)) - 0.38,
-        xmax = as.numeric(factor(chr)) + 0.38,
-        ymin = 0, ymax = size_mb),
-    fill = "grey96", color = "grey70", linewidth = 0.4
-  ) +
-  geom_linerange(
-    data = map_data,
-    aes(x = chr, ymin = position_mb, ymax = position_mb + 0.08, 
-        color = motif_class),
-    linewidth = 16.0, alpha = 1.0
-  ) +
-  scale_color_manual(
-    values = motif_colors, 
-    labels = legend_labels,
-    name = "Motif type",
-    guide = guide_legend(ncol = 1)
-  ) +
-  scale_y_continuous(
-    expand = expansion(mult = c(0, 0.03)),
-    breaks = seq(0, 700, by = 50),
-    labels = function(x) paste0(x, " Mb")
-  ) +
-  theme_classic(base_size = 11) +
-  theme(
-    axis.text.x = element_text(size = 9, angle = 45, hjust = 1, color = "grey20"),
-    axis.text.y = element_text(size = 9, color = "grey20"),
-    axis.title = element_text(size = 11, face = "bold", color = "grey10"),
-    axis.line = element_line(color = "grey30", linewidth = 0.4),
-    axis.ticks = element_line(color = "grey30", linewidth = 0.4),
-    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.35),
-    panel.border = element_rect(color = "grey75", linewidth = 0.5),
-    legend.title = element_text(size = 9.5, face = "bold", color = "grey10"),
-    legend.text = element_text(size = 8, color = "grey25"),
-    legend.key.size = unit(0.35, "cm"),
-    plot.title = element_text(size = 13, face = "bold", hjust = 0.5,
-                              color = "grey10", margin = margin(b = 6)),
-    plot.subtitle = element_text(size = 9.5, color = "grey40", hjust = 0.5,
-                                 margin = margin(b = 8)),
-    plot.margin = margin(12, 12, 10, 12)
-  ) +
-  labs(
-    title = "A  Physical map: STR loci by motif repeat period",
-    subtitle = paste0(format(nrow(map_data), big.mark = ","), " loci across ",
-                      length(unique(map_data$chr)), " chromosomes"),
-    x = "Chromosome",
-    y = "Position (Mb)"
-  )
-
-# ---- PLOT 2: Density Heatmap ----
-window_mb <- 2.0
-
-density_data <- map_data %>%
-  mutate(bin = floor(position_mb / window_mb) * window_mb) %>%
-  count(chr, bin, name = "n_loci") %>%
-  left_join(chrom_plot_data %>% select(chr, size_mb), by = "chr") %>%
-  group_by(chr) %>%
-  do({
-    bins_seq <- seq(0, floor(max(.$size_mb, na.rm = TRUE) / window_mb) * window_mb, 
-                    by = window_mb)
-    complete(., bin = bins_seq, fill = list(n_loci = 0))
-  }) %>%
-  filter(bin < size_mb) %>%
-  mutate(
-    tile_top = pmin(bin + window_mb, size_mb),
-    tile_center = (bin + tile_top) / 2,
-    tile_height = tile_top - bin
-  ) %>%
-  ungroup()
-
-density_map <- ggplot() +
-  geom_rect(
-    data = chrom_plot_data,
-    aes(xmin = as.numeric(factor(chr)) - 0.42,
-        xmax = as.numeric(factor(chr)) + 0.42,
-        ymin = 0, ymax = size_mb + 0.5),
-    fill = "grey97", color = "grey65", linewidth = 0.4
-  ) +
-  geom_tile(
-    data = density_data,
-    aes(x = chr, y = tile_center, fill = n_loci, height = tile_height),
-    width = 0.79, color = NA
-  ) +
-  scale_fill_gradientn(
-    colors = c("white", "#B3D9FF", "#4D94FF", "#0052CC", "#001A4D"),
-    name = "# loci",
-    guide = guide_colorbar(barwidth = 0.7, barheight = 4, ticks = FALSE)
-  ) +
-  scale_y_continuous(
-    expand = expansion(mult = c(0, 0.03)),
-    breaks = seq(0, 700, by = 50),
-    labels = function(x) paste0(x, " Mb")
-  ) +
-  theme_classic(base_size = 11) +
-  theme(
-    axis.text.x = element_text(size = 9, angle = 45, hjust = 1, color = "grey20"),
-    axis.text.y = element_text(size = 9, color = "grey20"),
-    axis.title = element_text(size = 11, face = "bold", color = "grey10"),
-    axis.line = element_line(color = "grey30", linewidth = 0.4),
-    axis.ticks = element_line(color = "grey30", linewidth = 0.4),
-    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.35),
-    panel.border = element_rect(color = "grey75", linewidth = 0.5),
-    legend.title = element_text(size = 9.5, face = "bold", color = "grey10"),
-    legend.text = element_text(size = 8, color = "grey25"),
-    plot.title = element_text(size = 13, face = "bold", hjust = 0.5,
-                              color = "grey10", margin = margin(b = 6)),
-    plot.subtitle = element_text(size = 9.5, color = "grey40", hjust = 0.5,
-                                 margin = margin(b = 8)),
-    plot.margin = margin(12, 12, 10, 12)
-  ) +
-  labs(
-    title = "B  STR density heatmap across chromosomes",
-    subtitle = paste0("Window size: ", window_mb, " Mb (PASS loci only)"),
-    x = "Chromosome",
-    y = "Position (Mb)"
-  )
-
-# Combine plots
-fig_genomic_d2 <- physical_map | density_map
-fig_genomic_d2
-
-# Export
-ggsave("d2_physical_map_by_motif_v2.png", plot = physical_map,
-       width = 220, height = 160, units = "mm", dpi = 600, bg = "white")
-ggsave("d2_density_heatmap_v2.png", plot = density_map,
-       width = 220, height = 160, units = "mm", dpi = 600, bg = "white")
-
-cat("\n✓ Figures exported:\n",
-    "  d2_physical_map_by_motif.png\n",
-    "  d2_density_heatmap.png\n")
-``` 
 
 ---
 
@@ -1271,73 +1012,6 @@ cat("Files generated:\n",
     "  d3_distribuicao_filtros.csv\n")
 ```
 
-## D3-12.1. Chromosome/Moritf export
-
-```{r d3_exportar_chrom_motif}
-# Reference allele length and copy number per locus
-locus_info <- info_df %>%
-  mutate(
-    REF_len     = nchar(vcf@fix[, "REF"]),
-    Copy_number = REF_len / PERIOD,
-    Classe = case_when(
-      PERIOD == 1 ~ "Mono",
-      PERIOD == 2 ~ "Di",
-      PERIOD == 3 ~ "Tri",
-      PERIOD == 4 ~ "Tetra",
-      PERIOD == 5 ~ "Penta",
-      PERIOD == 6 ~ "Hexa",
-      PERIOD == 7 ~ "Hepta",
-      PERIOD == 8 ~ "Octa",
-      PERIOD == 9 ~ "Nona",
-      TRUE ~ NA_character_
-    )
-  ) %>%
-  select(Loco, CHROM, PERIOD, Classe, REF_len, Copy_number)
-
-# Number of distinct alleles per locus (defines polymorphism)
-alelos_por_loco <- gb_long %>%
-  group_by(Loco) %>%
-  summarise(n_alelos = n_distinct(bp_diff), .groups = "drop") %>%
-  mutate(Polimorfico = n_alelos > 1)
-
-locus_info <- locus_info %>%
-  left_join(alelos_por_loco, by = "Loco") %>%
-  mutate(Polimorfico = ifelse(is.na(Polimorfico), FALSE, Polimorfico))
-
-# Count by repeat class (Mono...Nona), per chromosome
-classe_wide <- locus_info %>%
-  count(CHROM, Classe) %>%
-  pivot_wider(names_from = Classe, values_from = n, values_fill = 0)
-
-# Final table aggregated by chromosome
-tabela_ssr_cromossomo <- locus_info %>%
-  group_by(CHROM) %>%
-  summarise(
-    No_of_SSRs          = n(),
-    Total_SSR_length_bp = sum(REF_len, na.rm = TRUE),
-    Mean_copy_number    = round(mean(Copy_number, na.rm = TRUE), 2),
-    No_polymorphic_SSRs = sum(Polimorfico, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  left_join(classe_wide, by = "CHROM") %>%
-  left_join(chr_sizes, by = c("CHROM" = "Chromosome")) %>%
-  mutate(
-    SSRs_per_Mb             = round(No_of_SSRs / (Chr_size_bp / 1e6), 2),
-    Pct_chr_in_SSRs         = round(Total_SSR_length_bp / Chr_size_bp * 100, 4),
-    Polymorphic_SSRs_per_Mb = round(No_polymorphic_SSRs / (Chr_size_bp / 1e6), 2)
-  ) %>%
-  rename(Chromosome = CHROM) %>%
-  select(
-    Chromosome, Chr_size_bp, No_of_SSRs, SSRs_per_Mb,
-    any_of(c("Mono","Di","Tri","Tetra","Penta","Hexa","Hepta","Octa","Nona")),
-    Total_SSR_length_bp, Pct_chr_in_SSRs, Mean_copy_number,
-    No_polymorphic_SSRs, Polymorphic_SSRs_per_Mb
-  )
-
-knitr::kable(tabela_ssr_cromossomo, digits = 4)
-write_csv(tabela_ssr_cromossomo, "d3_ssr_summary_chromosome.csv")
-```
-
 ## D3-13. Figure 1 — Filters by sample
 
 ```{r d3_fig1, fig.width=10, fig.height=12}
@@ -1399,7 +1073,7 @@ p1b <- perc_pass_amostra %>%
   scale_x_continuous(labels = label_percent(scale = 1),
                      limits = c(0, 100)) +
   labs(
-    title    = "B  PASS call rate by sample",
+    title    = "B  Proportion of loci with an approved call (DP ≥ 8)",
     subtitle = "Dashed line = 70%",
     x        = "% loci with PASS",
     y        = NULL
@@ -1597,7 +1271,17 @@ p5a <- gb_long %>%
 
 p5b <- gb_long %>%
   filter(PERIOD >= 2, PERIOD <= 9) %>%
-  mutate(PERIOD_lab = paste0("PERIOD = ", PERIOD, " bp")) %>%
+  mutate(PERIOD_lab = factor(recode(as.character(PERIOD),
+      "2" = "Di-",
+      "3" = "Tri-",
+      "4" = "Tetra-",
+      "5" = "Penta-",
+      "6" = "Hexa-",
+      "7" = "Hepta-",
+      "8" = "Octa-",
+      "9" = "Nona-"),
+    levels = c("Di-", "Tri-", "Tetra-", "Penta-",
+               "Hexa-", "Hepta-", "Octa-", "Nona-"))) %>%
   ggplot(aes(x = bp_diff,
              y = fct_rev(factor(PERIOD_lab)),
              fill = factor(PERIOD))) +
@@ -1943,4 +1627,3 @@ cat("\n✓ Figures exported:\n",
     "  d3_physical_map_by_motif.png\n",
     "  d3_density_heatmap.png\n")
 ```
-

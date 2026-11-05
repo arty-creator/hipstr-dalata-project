@@ -1,0 +1,91 @@
+---
+title: "Retention Heat Map"
+output: html_notebook
+---
+
+# heatmap_publication.R
+
+```{r}
+library(ggplot2)
+library(viridis)    
+library(tidyr)
+library(dplyr)
+```
+
+# Dados
+
+```{r}
+ret <- data.frame(
+  Motif = factor(c("Mono-","Di-","Tri-","Tetra-","Penta-",
+                   "Hexa-","Hepta-","Octa-","Nona-"),
+                 levels = rev(c("Mono-","Di-","Tri-","Tetra-","Penta-",
+                                "Hexa-","Hepta-","Octa-","Nona-"))),
+  D1_D2 = c(61.5,84.8,90.9,89.4,93.6,92.5,93.0,90.0,83.2),
+  D2_D3 = c(0.44,0.90,7.79,9.90,18.1,19.2,17.0,22.8,26.7),
+  D1_D3 = c(0.27,0.77,7.08,8.85,16.9,17.8,15.8,20.5,22.2)
+)
+```
+
+# Formato longo com tidyverse
+
+```{r}
+ret_long <- ret %>%
+  pivot_longer(cols = starts_with("D"),
+               names_to = "Comparison",
+               values_to = "Retention") %>%
+  mutate(
+    Comparison = recode(Comparison,
+                        D1_D2 = "Discovery → Genotyping",
+                        D2_D3 = "Genotyping → Filtered",
+                        D1_D3 = "Discovery → Filtered"),
+    Comparison = factor(Comparison, levels = c("Discovery → Genotyping",
+                                              "Genotyping → Filtered",
+                                              "Discovery → Filtered"))
+  ) %>%
+  mutate(
+    label = sprintf("%.1f%%", Retention),
+    label_col = ifelse(Retention > 50, "black", "white")
+  )
+```
+
+# Plot refinado
+
+```{r}
+p <- ggplot(ret_long, aes(x = Comparison, y = Motif, fill = Retention)) +
+  geom_tile(width = 0.92, height = 0.92, color = NA) +
+  geom_text(aes(label = label, color = label_col),
+            size = 3.8, show.legend = FALSE) +
+  scale_color_identity() +
+  scale_fill_viridis_c(
+    option = "C",
+    direction = 1,          # agora cores quentes representam valores mais altos
+    limits = c(0, 100),
+    breaks = seq(0, 100, 25),
+    labels = function(x) paste0(x, "%"),
+    name = "Retention (%)"
+  ) +
+  labs(x = NULL, y = "Motif type") +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 20, hjust = 1, vjust = 1),
+    axis.text.y = element_text(margin = margin(r = 6)),
+    panel.grid = element_blank(),
+    axis.ticks = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9),
+    plot.margin = margin(t = 6, r = 12, b = 6, l = 6)
+  ) +
+  guides(fill = guide_colorbar(
+    barwidth = 0.6, barheight = 6,
+    ticks = TRUE, ticks.colour = "black"
+  ))
+
+print(p)
+```
+
+# Salvar em alta resolução (raster) e em vetor
+
+```{r}
+ggsave("heatmap_retention_600dpi.png", p, width = 6.5, height = 4.0, dpi = 600)
+```
