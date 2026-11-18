@@ -756,27 +756,204 @@ fig7_d2 <- dp_chr %>%
 fig7_d2
 ```
 
----
+## D2-19. Physical map and locus density in the genome
 
-# DATASET 3
-# File: hipstr_post_dumpstr_filtered_trf.vcf
+```{r d2_fig_genomic_maps_motif, fig.width=16, fig.height=10}
+# Load chromosome sizes
+chrom_sizes <- read_tsv("chromosome_sizes.txt", 
+                        col_names = c("chr", "size_bp"), 
+                        show_col_types = FALSE)
 
-## D3-3. VCF reading
+total_chrom_size_bp <- sum(chrom_sizes$size_bp)
 
-```{r d3_leitura}
-vcf <- read.vcfR("hipstr_post_dumpstr_filtered_mq1.vcf", verbose = FALSE)
+# Prepare data with PERIOD
+map_data <- tibble(
+  locus = loco_ids,
+  chr = vcf@fix[, "CHROM"],
+  pos = as.numeric(vcf@fix[, "POS"]),
+  position_mb = pos / 1e6,
+  period = info_df$PERIOD
+) %>%
+  filter(!is.na(pos), !is.na(period)) %>%
+  mutate(
+    motif_class = case_when(
+      period == 1 ~ "Mono",
+      period == 2 ~ "Di",
+      period == 3 ~ "Tri",
+      period == 4 ~ "Tetra",
+      period == 5 ~ "Penta",
+      period == 6 ~ "Hexa",
+      period == 7 ~ "Hepta",
+      period == 8 ~ "Octa",
+      period == 9 ~ "Nona",
+      TRUE ~ "Other"
+    ),
+    motif_class = factor(motif_class, 
+                         levels = c("Mono", "Di", "Tri", "Tetra", "Penta", 
+                                   "Hexa", "Hepta", "Octa", "Nona", "Other"))
+  )
 
-samples    <- colnames(vcf@gt)[-1]
-n_amostras <- length(samples)
-n_locos    <- nrow(vcf@gt)
+chrom_plot_data <- chrom_sizes %>%
+  mutate(size_mb = size_bp / 1e6, chr = as.character(chr)) %>%
+  filter(chr %in% unique(map_data$chr))
 
-loco_ids <- vcf@fix[, "ID"]
-if (all(loco_ids == "."))
-  loco_ids <- paste0(vcf@fix[, "CHROM"], ":", vcf@fix[, "POS"])
+# Okabe-Ito palette for motifs
+motif_colors <- c(
+  "Mono"  = "#56B4E9", "Di"    = "#0072B2", "Tri"   = "#009E73",
+  "Tetra" = "#F0E442", "Penta" = "#E69F00", "Hexa"  = "#D55E00",
+  "Hepta" = "#CC79A7", "Octa"  = "#999999", "Nona"  = "#2C2C2A", 
+  "Other" = "#CCCCCC"
+)
 
-cat("Locos genotipados :", n_locos, "\n")
-cat("Amostras          :", n_amostras, "\n")
-cat("Amostras          :", paste(samples, collapse = ", "), "\n")
+# Legend with counts
+motif_counts <- map_data %>%
+  count(motif_class, name = "n") %>%
+  mutate(
+    pct = round((n / sum(n)) * 100, 1),
+    label = paste0(motif_class, " (n=", format(n, big.mark = ","), 
+                   ", ", pct, "%)")
+  )
+
+legend_labels <- setNames(motif_counts$label, motif_counts$motif_class)
+
+cat("✓ Locus map prepared (D2 - loci after genotype quality filters):\n",
+    "  -", nrow(map_data), "loci mapped with PERIOD\n",
+    "  -", length(unique(map_data$chr)), "chromosomes\n",
+    "  - Distribution by motif:\n")
+print(motif_counts)
+
+# ---- PLOT 1: Physical Map by Motif ----
+physical_map <- ggplot() +
+  geom_rect(
+    data = chrom_plot_data,
+    aes(xmin = as.numeric(factor(chr)) - 0.38,
+        xmax = as.numeric(factor(chr)) + 0.38,
+        ymin = 0, ymax = size_mb),
+    fill = "grey96", color = "grey70", linewidth = 0.4
+  ) +
+  geom_linerange(
+    data = map_data,
+    aes(x = chr, ymin = position_mb, ymax = position_mb + 0.08, 
+        color = motif_class),
+    linewidth = 16.0, alpha = 1.0
+  ) +
+  scale_color_manual(
+    values = motif_colors, 
+    labels = legend_labels,
+    name = "Motif type",
+    guide = guide_legend(ncol = 1)
+  ) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0, 0.03)),
+    breaks = seq(0, 700, by = 50),
+    labels = function(x) paste0(x, " Mb")
+  ) +
+  theme_classic(base_size = 11) +
+  theme(
+    axis.text.x = element_text(size = 9, angle = 45, hjust = 1, color = "grey20"),
+    axis.text.y = element_text(size = 9, color = "grey20"),
+    axis.title = element_text(size = 11, face = "bold", color = "grey10"),
+    axis.line = element_line(color = "grey30", linewidth = 0.4),
+    axis.ticks = element_line(color = "grey30", linewidth = 0.4),
+    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.35),
+    panel.border = element_rect(color = "grey75", linewidth = 0.5),
+    legend.title = element_text(size = 9.5, face = "bold", color = "grey10"),
+    legend.text = element_text(size = 8, color = "grey25"),
+    legend.key.size = unit(0.35, "cm"),
+    plot.title = element_text(size = 13, face = "bold", hjust = 0.5,
+                              color = "grey10", margin = margin(b = 6)),
+    plot.subtitle = element_text(size = 9.5, color = "grey40", hjust = 0.5,
+                                 margin = margin(b = 8)),
+    plot.margin = margin(12, 12, 10, 12)
+  ) +
+  labs(
+    title = "A  Physical map: STR loci by motif repeat period",
+    subtitle = paste0(format(nrow(map_data), big.mark = ","), " loci across ",
+                      length(unique(map_data$chr)), " chromosomes (loci after genotype quality filters)"),
+    x = "Chromosome",
+    y = "Position (Mb)"
+  )
+
+# ---- PLOT 2: Density Heatmap (WITHOUT separation by motif) ----
+window_mb <- 2.0
+
+density_data <- map_data %>%
+  mutate(bin = floor(position_mb / window_mb) * window_mb) %>%
+  count(chr, bin, name = "n_loci") %>%
+  left_join(chrom_plot_data %>% select(chr, size_mb), by = "chr") %>%
+  group_by(chr) %>%
+  do({
+    bins_seq <- seq(0, floor(max(.$size_mb, na.rm = TRUE) / window_mb) * window_mb, 
+                    by = window_mb)
+    complete(., bin = bins_seq, fill = list(n_loci = 0))
+  }) %>%
+  filter(bin < size_mb) %>%
+  mutate(
+    tile_top = pmin(bin + window_mb, size_mb),
+    tile_center = (bin + tile_top) / 2,
+    tile_height = tile_top - bin
+  ) %>%
+  ungroup()
+
+density_map <- ggplot() +
+  geom_rect(
+    data = chrom_plot_data,
+    aes(xmin = as.numeric(factor(chr)) - 0.42,
+        xmax = as.numeric(factor(chr)) + 0.42,
+        ymin = 0, ymax = size_mb + 0.5),
+    fill = "grey97", color = "grey65", linewidth = 0.4
+  ) +
+  geom_tile(
+    data = density_data,
+    aes(x = chr, y = tile_center, fill = n_loci, height = tile_height),
+    width = 0.79, color = NA
+  ) +
+  scale_fill_gradientn(
+    colors = c("white", "#B3D9FF", "#4D94FF", "#0052CC", "#001A4D"),
+    name = "# loci",
+    guide = guide_colorbar(barwidth = 0.7, barheight = 4, ticks = FALSE)
+  ) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0, 0.03)),
+    breaks = seq(0, 700, by = 50),
+    labels = function(x) paste0(x, " Mb")
+  ) +
+  theme_classic(base_size = 11) +
+  theme(
+    axis.text.x = element_text(size = 9, angle = 45, hjust = 1, color = "grey20"),
+    axis.text.y = element_text(size = 9, color = "grey20"),
+    axis.title = element_text(size = 11, face = "bold", color = "grey10"),
+    axis.line = element_line(color = "grey30", linewidth = 0.4),
+    axis.ticks = element_line(color = "grey30", linewidth = 0.4),
+    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.35),
+    panel.border = element_rect(color = "grey75", linewidth = 0.5),
+    legend.title = element_text(size = 9.5, face = "bold", color = "grey10"),
+    legend.text = element_text(size = 8, color = "grey25"),
+    plot.title = element_text(size = 13, face = "bold", hjust = 0.5,
+                              color = "grey10", margin = margin(b = 6)),
+    plot.subtitle = element_text(size = 9.5, color = "grey40", hjust = 0.5,
+                                 margin = margin(b = 8)),
+    plot.margin = margin(12, 12, 10, 12)
+  ) +
+  labs(
+    title = "B  STR density heatmap across chromosomes",
+    subtitle = paste0("Window size: ", window_mb, " Mb (loci after genotype quality filters)"),
+    x = "Chromosome",
+    y = "Position (Mb)"
+  )
+
+fig_genomic_d2 <- physical_map | density_map
+fig_genomic_d2
+
+# Export
+ggsave("d2_physical_map_by_motif.png", plot = physical_map,
+       width = 220, height = 160, units = "mm", dpi = 600, bg = "white")
+ggsave("d2_density_heatmap.png", plot = density_map,
+       width = 220, height = 160, units = "mm", dpi = 600, bg = "white")
+
+cat("\n✓ Figures exported:\n",
+    "  d2_physical_map_by_motif.png\n",
+    "  d2_density_heatmap.png\n")
 ```
 
 ## D3-4. Extraction of FORMAT matrices
@@ -1631,3 +1808,4 @@ cat("\n✓ Figures exported:\n",
     "  d3_physical_map_by_motif.png\n",
     "  d3_density_heatmap.png\n")
 ```
+
