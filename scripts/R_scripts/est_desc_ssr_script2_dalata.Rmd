@@ -107,7 +107,7 @@ theme_set(tema_pub)
 ## D2-3. VCF reading
 
 ```{r d2_leitura}
-vcf <- read.vcfR("hipstr_trf_v2_filtered.vcf", verbose = FALSE)
+vcf <- read.vcfR("hipstr_mq1.vcf", verbose = FALSE)
 geno_test <- extract.info(vcf, element = "START", as.numeric = FALSE, mask = FALSE)
 
 samples    <- colnames(vcf@gt)[-1]
@@ -596,7 +596,7 @@ p6a <- art_df %>%
     y        = "% of loci"
   )
 
-# AB and FS: filter by called GT (not "./.")
+# AB and FS: apenas genótipos heterozigotos chamados (GT faseado "a|b", a != b)
 ab_long <- as.data.frame(ab_mat) %>%
   mutate(Loco = loco_ids) %>%
   pivot_longer(-Loco, names_to = "Amostra", values_to = "AB") %>%
@@ -606,7 +606,9 @@ ab_long <- as.data.frame(ab_mat) %>%
       pivot_longer(-Loco, names_to = "Amostra", values_to = "GT"),
     by = c("Loco", "Amostra")
   ) %>%
-  filter(GT != "./.", !is.na(GT), !is.na(AB), AB < 0)
+  filter(!is.na(GT),
+         sub("\\|.*", "", GT) != sub(".*\\|", "", GT),
+         !is.na(AB), AB < 0)
 
 fs_long <- as.data.frame(fs_mat) %>%
   mutate(Loco = loco_ids) %>%
@@ -617,7 +619,9 @@ fs_long <- as.data.frame(fs_mat) %>%
       pivot_longer(-Loco, names_to = "Amostra", values_to = "GT"),
     by = c("Loco", "Amostra")
   ) %>%
-  filter(GT != "./.", !is.na(GT), !is.na(FS), FS < 0)
+  filter(!is.na(GT),
+         sub("\\|.*", "", GT) != sub(".*\\|", "", GT),
+         !is.na(FS), FS < 0)
 
 bias_long <- bind_rows(
   ab_long %>% transmute(valor = AB, Tipo = "AB (allele bias)"),
@@ -626,16 +630,16 @@ bias_long <- bind_rows(
 
 p6b <- bias_long %>%
   ggplot(aes(x = valor, fill = Tipo)) +
-  geom_histogram(binwidth = 0.05, alpha = 0.8, color = "white",
-                 linewidth = 0.1, position = "identity") +
+  geom_histogram(bins = 60, alpha = 0.8, color = NA,
+                 position = "identity") +
   geom_vline(
-  data = data.frame(x_int = -2, tipo_linha = "dashed"),
-  aes(xintercept = x_int, linetype = I(tipo_linha)),
-  color = "grey30", linewidth = 0.5
-) +
+    data = data.frame(x_int = -2, tipo_linha = "dashed"),
+    aes(xintercept = x_int, linetype = I(tipo_linha)),
+    color = "grey30", linewidth = 0.5
+  ) +
   scale_fill_manual(values = c("#E69F00", "#CC79A7"), name = NULL) +
   scale_y_continuous(labels = label_comma(), expand = c(0, 0)) +
-  facet_wrap(~Tipo, scales = "free_y") +
+  facet_wrap(~Tipo, scales = "free") +
   labs(
     title    = "B  Distribution of allele bias (AB) and strand bias (FS)",
     subtitle = "Called heterozygous genotypes; values = log10(p-value)",
@@ -760,7 +764,7 @@ fig7_d2
 ## D3-3. VCF reading
 
 ```{r d3_leitura}
-vcf <- read.vcfR("hipstr_post_dumpstr_filtered_trf.vcf", verbose = FALSE)
+vcf <- read.vcfR("hipstr_post_dumpstr_filtered_mq1.vcf", verbose = FALSE)
 
 samples    <- colnames(vcf@gt)[-1]
 n_amostras <- length(samples)

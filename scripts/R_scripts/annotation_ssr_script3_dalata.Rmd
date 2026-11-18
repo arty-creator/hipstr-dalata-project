@@ -87,7 +87,7 @@ library(vcfR)
 ## 1.2 Configuration
 
 ```{r config}
-VCF_STR   <- "hipstr_trf_v2_filtered.vcf"
+VCF_STR   <- "hipstr_mq1.vcf"
 GENOME_FA <- "genome.fasta"
 GTF_FILE  <- "mikado.loci.clean.step2.primaryTranscripts.gff3"
 PROM_UP   <- 2000
