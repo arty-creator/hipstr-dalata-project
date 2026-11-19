@@ -23,28 +23,6 @@ knitr::opts_chunk$set(
 
 ---
 
-# NOTE ON USE
-
-This script is compatible with two datasets produced in successive stages
-of the HipSTR pipeline:
-
-- **Dataset 2** — VCF after `filter_vcf.py` with genotype quality filters
-  genótipo (`--min-call-qual 0.9`, `--max-call-flank-indel 0.15`,
-  `--max-call-stutter 0.15`, `--min-call-allele-bias -2`,
-  Genotypes that failed are **removed**
-  (GT field = `./.`); there is no genotype-level `FILTER` tag in the FORMAT field.
-  Input file: `hipstr_trf_v2_filtered.vcf`.
-
-- **Dataset 3** — VCF with additional DP ≥ 8 and call rate ≥ 0.7 filters
-  applied via DumpSTR, reducing the dataset from 29,375 to 1,999 loci.
-  Valid genotypes carry `FILTER = PASS` in the FORMAT field.
-  Input file: `hipstr_post_dumpstr_filtered_trf.vcf`.
-
-Run only the sections marked with the dataset corresponding to the loaded file.
-Unmarked sections are compatible with both.
-
----
-
 # 1. Packages
 
 ```{r pacotes}
@@ -102,7 +80,7 @@ theme_set(tema_pub)
 ---
 
 # DATASET 2
-# File: hipstr_trf_v2_filtered.vcf
+# File: hipstr_mq1.vcf
 
 ## D2-3. VCF reading
 
@@ -251,7 +229,25 @@ knitr::kable(tabela_global, digits = 4)
 write.csv(tabela_global, "tabela_global_D2.csv", row.names = FALSE)
 ```
 
-## D2-8. Statistics per locus
+## D2-8. Monomorphic loci number
+
+```{r d2_monomorficos}
+# Distinct alleles observed across all called genotypes of each locus
+# (GT split by "/" or "|"; missing alleles "." dropped)
+n_alelos_loco <- apply(gt_mat, 1, function(g) {
+  a <- unlist(strsplit(g[!is.na(g)], "[/|]"))
+  length(unique(a[a != "."]))
+})
+
+tibble(
+  Categoria = c("Monomorphic (1 allele)", "Polymorphic (>= 2 alleles)", "No called genotype"),
+  N_loci    = c(sum(n_alelos_loco == 1), sum(n_alelos_loco >= 2), sum(n_alelos_loco == 0))
+) %>%
+  mutate(pct = round(N_loci / n_locos * 100, 2)) %>%
+  knitr::kable(col.names = c("Category", "N loci", "% loci"))
+```
+
+## D2-9. Statistics per locus
 
 ```{r d2_stats_por_loco}
 stats_por_loco <- tibble(
@@ -285,7 +281,7 @@ summary(stats_por_loco$Callrate_pct)
 knitr::kable(head(stats_por_loco, 10))
 ```
 
-## D2-9. Statistics per sample
+## D2-10. Statistics per sample
 
 ```{r d2_stats_por_amostra}
 stats_por_amostra <- tibble(
@@ -309,7 +305,7 @@ stats_por_amostra <- tibble(
 knitr::kable(stats_por_amostra)
 ```
 
-## D2-10. Raw call rate per locus
+## D2-11. Raw call rate per locus
 
 ```{r d2_callrate_loco}
 cat("Call rate distribution per locus:\n")
@@ -325,7 +321,7 @@ callrate_loco %>%
   knitr::kable(col.names = c("Call rate range (%)", "N loci", "% loci"))
 ```
 
-## D2-11. GB variation (bp diff vs. reference)
+## D2-12. GB variation (bp diff. vs. reference)
 
 ```{r d2_gb_stats}
 gb_nums_d2 <- gb_long$bp_diff
@@ -344,7 +340,7 @@ tibble(
 ) %>% knitr::kable()
 ```
 
-## D2-12. CSV table export
+## D2-13. CSV table export
 
 ```{r d2_exportar_csv}
 write_csv(tabela_global,     "d2_stats_global_campos_FORMAT.csv")
@@ -359,7 +355,7 @@ cat("Files generated:\n",
     "  d2_callrate_por_loco.csv\n")
 ```
 
-## D2-13. Figure 1 — DP and composition by sample
+## D2-14. Figure 1 — DP and composition by sample
 
 ```{r d2_fig1, fig.width=10, fig.height=10}
 # Depth categories
@@ -443,7 +439,7 @@ fig1_d2
 # The "0–5" category threshold includes loci with DP = 0 that still have a called GT — this can occur if HipSTR assigned a genotype with support from flanking reads but without central reads.
 ```
 
-## D2-14. Figure 2 — DP of called genotypes by sample
+## D2-15. Figure 2 — DP of called genotypes by sample
 
 ```{r d2_fig2, fig.width=10, fig.height=10}
 p2a <- dp_called %>%
@@ -484,7 +480,7 @@ fig2_d2 <- p2a / p2b
 fig2_d2
 ```
 
-## D2-15. Figure 3 — Genotype quality (Q and GLDIFF)
+## D2-16. Figure 3 — Genotype quality (Q and GLDIFF)
 
 ```{r d2_fig3, fig.width=11, fig.height=10}
 q_long <- as.data.frame(q_mat) %>%
@@ -568,7 +564,7 @@ fig3_d2 <- (p3a | p3b) / p3c
 fig3_d2
 ```
 
-## D2-16. Figure 4 — Artifacts: stutter, allele bias, and strand bias
+## D2-17. Figure 4 — Artifacts: stutter, allele bias, and strand bias
 
 ```{r d2_fig6, fig.width=10, fig.height=10}
 art_df <- tibble(
@@ -651,7 +647,8 @@ p6b <- bias_long %>%
 fig6_d2 <- p6a / p6b
 fig6_d2
 ```
-## D2-17. Figure 5 — Allelic variation (GB)
+
+## D2-18. Figure 5 — Allelic variation (GB)
 
 ```{r d2_fig5, fig.width=10, fig.height=11}
 p5a <- gb_long %>%
@@ -706,7 +703,7 @@ fig5_d2 <- p5a / p5b + plot_layout(heights = c(1, 1.6))
 fig5_d2
 ```
 
-## D2-18. Figure 6 — DP heatmap by sample × chromosome
+## D2-19. Figure 6 — DP heatmap by sample × chromosome
 
 ```{r d2_fig7, fig.width=9, fig.height=8}
 dp_chr <- as.data.frame(dp_mat) %>%
@@ -756,7 +753,7 @@ fig7_d2 <- dp_chr %>%
 fig7_d2
 ```
 
-## D2-19. Physical map and locus density in the genome
+## D2-20. Physical map and locus density in the genome
 
 ```{r d2_fig_genomic_maps_motif, fig.width=16, fig.height=10}
 # Load chromosome sizes
@@ -946,14 +943,122 @@ fig_genomic_d2 <- physical_map | density_map
 fig_genomic_d2
 
 # Export
-ggsave("d2_physical_map_by_motif.png", plot = physical_map,
-       width = 220, height = 160, units = "mm", dpi = 600, bg = "white")
-ggsave("d2_density_heatmap.png", plot = density_map,
-       width = 220, height = 160, units = "mm", dpi = 600, bg = "white")
+# Export
+ggsave("d2_genomic_maps.pdf", plot = fig_genomic_d2,
+       width = 440, height = 160, units = "mm", bg = "white")
 
-cat("\n✓ Figures exported:\n",
-    "  d2_physical_map_by_motif.png\n",
-    "  d2_density_heatmap.png\n")
+cat("\n✓ Figure exported:\n",
+    "  d2_genomic_maps.pdf\n")
+```
+
+## D2-21. Top 3 chromosomes by SSR density
+
+```{r d2_top3_densidade}
+top3_chr_d2 <- tibble(CHROM = vcf@fix[, "CHROM"]) %>%
+  filter(str_detect(CHROM, "^Dal_")) %>%
+  count(CHROM, name = "N_loci") %>%
+  left_join(
+    chrom_sizes %>% 
+      transmute(CHROM = chr, size_bp),
+    by = "CHROM"
+  ) %>%
+  mutate(
+    Density = round(N_loci / (size_bp / 1e6), 2)
+  ) %>%
+  slice_max(Density, n = 3, with_ties = FALSE)
+
+knitr::kable(
+  top3_chr_d2,
+  col.names = c("Chromosome", "N loci", "Chromosome size (bp)", "Loci/Mb")
+)
+```
+
+## D2-22. Summary table of SSRs per chromosome
+
+```{r d2_tabela_cromossomos}
+# Locus-level table (same order as the VCF records; n_alelos_loco comes from D2-8)
+loci_tab <- tibble(
+  CHROM    = vcf@fix[, "CHROM"],
+  PERIOD   = info_df$PERIOD,
+  START    = as.numeric(str_match(info_df$INFO, "(?:^|;)START=([0-9]+)")[, 2]),
+  END      = as.numeric(str_match(info_df$INFO, "(?:^|;)END=([0-9]+)")[, 2]),
+  n_alelos = n_alelos_loco
+) %>%
+  mutate(len_bp = END - START + 1)
+
+motif_labs <- c("Mono", "Di", "Tri", "Tetra", "Penta",
+                "Hexa", "Hepta", "Octa", "Nona")
+
+# Number of SSRs per chromosome and motif class
+motif_n <- loci_tab %>%
+  filter(PERIOD %in% 1:9) %>%
+  mutate(motif = factor(PERIOD, levels = 1:9, labels = motif_labs)) %>%
+  count(CHROM, motif) %>%
+  complete(CHROM, motif, fill = list(n = 0)) %>%
+  pivot_wider(names_from = motif, values_from = n)
+
+# Per-chromosome summaries
+chr_stats <- loci_tab %>%
+  group_by(CHROM) %>%
+  summarise(
+    No_SSRs             = n(),
+    Total_SSR_length_bp = sum(len_bp, na.rm = TRUE),
+    Mean_copy_number    = mean(len_bp / PERIOD, na.rm = TRUE),
+    No_polymorphic_SSRs = sum(n_alelos >= 2),
+    .groups = "drop"
+  )
+
+tabela_chr_d2 <- chrom_sizes %>%
+  filter(str_detect(chr, "^Dal_")) %>%
+  transmute(Chromosome = chr, Chr_Size_bp = size_bp) %>%
+  left_join(chr_stats, by = c("Chromosome" = "CHROM")) %>%
+  left_join(motif_n,   by = c("Chromosome" = "CHROM")) %>%
+  mutate(
+    across(c(No_SSRs, Total_SSR_length_bp, No_polymorphic_SSRs, all_of(motif_labs)),
+           ~ replace_na(.x, 0)),
+    SSRs_per_Mb             = round(No_SSRs / (Chr_Size_bp / 1e6), 2),
+    Pct_chr_in_SSRs         = round(Total_SSR_length_bp / Chr_Size_bp * 100, 3),
+    Mean_copy_number        = round(Mean_copy_number, 2),
+    Polymorphic_SSRs_per_Mb = round(No_polymorphic_SSRs / (Chr_Size_bp / 1e6), 2)
+  ) %>%
+  select(Chromosome, Chr_Size_bp, No_SSRs, SSRs_per_Mb,
+         all_of(motif_labs),
+         Total_SSR_length_bp, Pct_chr_in_SSRs, Mean_copy_number,
+         No_polymorphic_SSRs, Polymorphic_SSRs_per_Mb)
+
+knitr::kable(
+  tabela_chr_d2,
+  col.names = c("Chromosome", "Chr Size Bp", "No of SSRs", "SSRs per Mb",
+                motif_labs,
+                "Total SSR length bp", "Pct chr in SSRs", "Mean copy number",
+                "No of polymorphic SSRs", "Polymorphic SSRs per Mb"),
+  format.args = list(big.mark = ",")
+)
+
+write_csv(tabela_chr_d2, "d2_stats_por_cromossomo.csv")
+```
+
+---
+
+# DATASET 3
+# File: hipstr_post_dumpstr_filtered_mq1.vcf
+
+## D3-3. VCF reading
+
+```{r d3_leitura}
+vcf <- read.vcfR("hipstr_post_dumpstr_filtered_mq1.vcf", verbose = FALSE)
+
+samples    <- colnames(vcf@gt)[-1]
+n_amostras <- length(samples)
+n_locos    <- nrow(vcf@gt)
+
+loco_ids <- vcf@fix[, "ID"]
+if (all(loco_ids == "."))
+  loco_ids <- paste0(vcf@fix[, "CHROM"], ":", vcf@fix[, "POS"])
+
+cat("Genotyped loci :", n_locos, "\n")
+cat("Samples        :", n_amostras, "\n")
+cat("Samples        :", paste(samples, collapse = ", "), "\n")
 ```
 
 ## D3-4. Extraction of FORMAT matrices
@@ -1064,7 +1169,28 @@ knitr::kable(tabela_global, digits = 4)
 write.csv(tabela_global, "tabela_global_D3.csv", row.names = FALSE)
 ```
 
-## D3-8. Statistics per locus
+## D3-8. Monomorphic loci number
+
+```{r d3_monomorficos}
+# Distinct alleles observed across PASS genotypes of each locus
+# (non-PASS genotypes masked; GT split by "/" or "|"; missing alleles "." dropped)
+gt_pass <- gt_mat
+gt_pass[is.na(filter_mat) | filter_mat != "PASS"] <- NA
+
+n_alelos_loco <- apply(gt_pass, 1, function(g) {
+  a <- unlist(strsplit(g[!is.na(g)], "[/|]"))
+  length(unique(a[a != "."]))
+})
+
+tibble(
+  Categoria = c("Monomorphic (1 allele)", "Polymorphic (>= 2 alleles)", "No PASS genotype"),
+  N_loci    = c(sum(n_alelos_loco == 1), sum(n_alelos_loco >= 2), sum(n_alelos_loco == 0))
+) %>%
+  mutate(pct = round(N_loci / n_locos * 100, 2)) %>%
+  knitr::kable(col.names = c("Category", "N loci", "% loci"))
+```
+
+## D3-9. Statistics per locus
 
 ```{r d3_stats_por_loco}
 stats_por_loco <- tibble(
@@ -1104,7 +1230,7 @@ summary(stats_por_loco$Perc_PASS)
 knitr::kable(head(stats_por_loco, 10))
 ```
 
-## D3-9. Statistics per sample
+## D3-10. Statistics per sample
 
 ```{r d3_stats_por_amostra}
 stats_por_amostra <- tibble(
@@ -1133,7 +1259,7 @@ stats_por_amostra <- tibble(
 knitr::kable(stats_por_amostra)
 ```
 
-## D3-10. Filter distribution
+## D3-11. Filter distribution
 
 ```{r d3_filtros_freq}
 todos_filtros <- as.vector(filter_mat)
@@ -1150,7 +1276,7 @@ knitr::kable(contagem_filtros)
 write.csv(contagem_filtros, "contagem_filt_D3.csv")
 ```
 
-## D3-11. GB variation (bp diff vs. reference)
+## D3-12. GB variation (bp diff. vs. reference)
 
 ```{r d3_gb_stats}
 gb_vals_mask <- filter_mat == "PASS"
@@ -1178,7 +1304,7 @@ tibble(
 ) %>% knitr::kable()
 ```
 
-## D3-12. CSV table export
+## D3-13. CSV table export
 
 ```{r d3_exportar_csv}
 write_csv(tabela_global,     "d3_stats_global_campos_FORMAT.csv")
@@ -1193,7 +1319,7 @@ cat("Files generated:\n",
     "  d3_distribuicao_filtros.csv\n")
 ```
 
-## D3-13. Figure 1 — Filters by sample
+## D3-14. Figure 1 — Filters by sample
 
 ```{r d3_fig1, fig.width=10, fig.height=12}
 filter_long <- as.data.frame(filter_mat) %>%
@@ -1265,7 +1391,7 @@ fig1_d3 <- p1a / p1b + plot_layout(heights = c(1.4, 1))
 fig1_d3
 ```
 
-## D3-14. Figure 2 — Read depth (DP)
+## D3-15. Figure 2 — Read depth (DP)
 
 ```{r d3_fig2, fig.width=10, fig.height=10}
 p2a <- dp_pass %>%
@@ -1306,7 +1432,7 @@ fig2_d3 <- p2a / p2b
 fig2_d3
 ```
 
-## D3-15. Figure 3 — Genotype quality (Q and GLDIFF)
+## D3-16. Figure 3 — Genotype quality (Q and GLDIFF)
 
 ```{r d3_fig3, fig.width=11, fig.height=10}
 q_long <- as.data.frame(q_mat) %>%
@@ -1390,7 +1516,7 @@ fig3_d3 <- (p3a | p3b) / p3c
 fig3_d3
 ```
 
-## D3-16. Figure 4 — Heterozygosity and HWE per locus
+## D3-17. Figure 4 — Heterozygosity and HWE per locus
 
 ```{r d3_fig4, fig.width=11, fig.height=10}
 p4a <- info_df %>%
@@ -1433,7 +1559,7 @@ fig4_d3 <- p4a / p4b + plot_layout(heights = c(1, 1.6))
 fig4_d3
 ```
 
-## D3-17. Figure 5 — Allelic variation (GB)
+## D3-18. Figure 5 — Allelic variation (GB)
 
 ```{r d3_fig5, fig.width=10, fig.height=11}
 p5a <- gb_long %>%
@@ -1488,7 +1614,7 @@ fig5_d3 <- p5a / p5b + plot_layout(heights = c(1, 1.6))
 fig5_d3
 ```
 
-## D3-18. Figure 6 — Artifacts: stutter, allele bias, and strand bias
+## D3-19. Figure 6 — Artifacts: stutter, allele bias, and strand bias
 
 ```{r d3_fig6, fig.width=10, fig.height=10}
 art_df <- tibble(
@@ -1567,7 +1693,7 @@ fig6_d3 <- p6a / p6b
 fig6_d3
 ```
 
-## D3-19. Figure 7 — DP heatmap by sample × chromosome
+## D3-20. Figure 7 — DP heatmap by sample × chromosome
 
 ```{r d3_fig7, fig.width=9, fig.height=8}
 dp_chr <- as.data.frame(dp_mat) %>%
@@ -1609,7 +1735,7 @@ fig7_d3 <- dp_chr %>%
 fig7_d3
 ```
 
-## D3-20. Physical map and locus density in the genome
+## D3-21. Physical map and locus density in the genome
 
 ```{r d3_fig_genomic_maps_motif, fig.width=16, fig.height=10}
 # Load chromosome sizes
@@ -1799,13 +1925,96 @@ fig_genomic_d3 <- physical_map | density_map
 fig_genomic_d3
 
 # Export
-ggsave("d3_physical_map_by_motif.png", plot = physical_map,
-       width = 220, height = 160, units = "mm", dpi = 600, bg = "white")
-ggsave("d3_density_heatmap.png", plot = density_map,
-       width = 220, height = 160, units = "mm", dpi = 600, bg = "white")
+ggsave("d3_genomic_maps.pdf", plot = fig_genomic_d3,
+       width = 440, height = 160, units = "mm", bg = "white")
 
-cat("\n✓ Figures exported:\n",
-    "  d3_physical_map_by_motif.png\n",
-    "  d3_density_heatmap.png\n")
+cat("\n✓ Figure exported:\n",
+    "  d3_genomic_maps.pdf\n")
 ```
 
+## D3-22. Top 3 chromosomes by SSR density
+
+```{r d3_top3_densidade}
+top3_chr_d3 <- tibble(CHROM = vcf@fix[, "CHROM"]) %>%
+  filter(str_detect(CHROM, "^Dal_")) %>%
+  count(CHROM, name = "N_loci") %>%
+  left_join(
+    chrom_sizes %>% 
+      transmute(CHROM = chr, size_bp),
+    by = "CHROM"
+  ) %>%
+  mutate(
+    Density = round(N_loci / (size_bp / 1e6), 2)
+  ) %>%
+  slice_max(Density, n = 3, with_ties = FALSE)
+
+knitr::kable(
+  top3_chr_d3,
+  col.names = c("Chromosome", "N loci", "Chromosome size (bp)", "Loci/Mb")
+)
+```
+
+## D3-23. Summary table of SSRs per chromosome
+
+```{r d3_tabela_cromossomos}
+# Locus-level table (same order as the VCF records; n_alelos_loco comes from D3-8)
+loci_tab <- tibble(
+  CHROM    = vcf@fix[, "CHROM"],
+  PERIOD   = info_df$PERIOD,
+  START    = as.numeric(str_match(info_df$INFO, "(?:^|;)START=([0-9]+)")[, 2]),
+  END      = as.numeric(str_match(info_df$INFO, "(?:^|;)END=([0-9]+)")[, 2]),
+  n_alelos = n_alelos_loco
+) %>%
+  mutate(len_bp = END - START + 1)
+
+motif_labs <- c("Mono", "Di", "Tri", "Tetra", "Penta",
+                "Hexa", "Hepta", "Octa", "Nona")
+
+# Number of SSRs per chromosome and motif class
+motif_n <- loci_tab %>%
+  filter(PERIOD %in% 1:9) %>%
+  mutate(motif = factor(PERIOD, levels = 1:9, labels = motif_labs)) %>%
+  count(CHROM, motif) %>%
+  complete(CHROM, motif, fill = list(n = 0)) %>%
+  pivot_wider(names_from = motif, values_from = n)
+
+# Per-chromosome summaries
+chr_stats <- loci_tab %>%
+  group_by(CHROM) %>%
+  summarise(
+    No_SSRs             = n(),
+    Total_SSR_length_bp = sum(len_bp, na.rm = TRUE),
+    Mean_copy_number    = mean(len_bp / PERIOD, na.rm = TRUE),
+    No_polymorphic_SSRs = sum(n_alelos >= 2),
+    .groups = "drop"
+  )
+
+tabela_chr_d3 <- chrom_sizes %>%
+  filter(str_detect(chr, "^Dal_")) %>%
+  transmute(Chromosome = chr, Chr_Size_bp = size_bp) %>%
+  left_join(chr_stats, by = c("Chromosome" = "CHROM")) %>%
+  left_join(motif_n,   by = c("Chromosome" = "CHROM")) %>%
+  mutate(
+    across(c(No_SSRs, Total_SSR_length_bp, No_polymorphic_SSRs, all_of(motif_labs)),
+           ~ replace_na(.x, 0)),
+    SSRs_per_Mb             = round(No_SSRs / (Chr_Size_bp / 1e6), 2),
+    Pct_chr_in_SSRs         = round(Total_SSR_length_bp / Chr_Size_bp * 100, 3),
+    Mean_copy_number        = round(Mean_copy_number, 2),
+    Polymorphic_SSRs_per_Mb = round(No_polymorphic_SSRs / (Chr_Size_bp / 1e6), 2)
+  ) %>%
+  select(Chromosome, Chr_Size_bp, No_SSRs, SSRs_per_Mb,
+         all_of(motif_labs),
+         Total_SSR_length_bp, Pct_chr_in_SSRs, Mean_copy_number,
+         No_polymorphic_SSRs, Polymorphic_SSRs_per_Mb)
+
+knitr::kable(
+  tabela_chr_d3,
+  col.names = c("Chromosome", "Chr Size Bp", "No of SSRs", "SSRs per Mb",
+                motif_labs,
+                "Total SSR length bp", "Pct chr in SSRs", "Mean copy number",
+                "No of polymorphic SSRs", "Polymorphic SSRs per Mb"),
+  format.args = list(big.mark = ",")
+)
+
+write_csv(tabela_chr_d3, "d3_stats_por_cromossomo.csv")
+```
