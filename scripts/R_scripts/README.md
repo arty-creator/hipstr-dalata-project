@@ -2,6 +2,6 @@
 
 Scripts em R para análise de SSRs em *Dipteryx alata*.
 
-* **Script 1:** estatísticas descritivas das regiões SSR identificadas pelo Tandem Repeat Finder (TRF).
+* **Script 1:** estatísticas descritivas das regiões SSR identificadas pelo Tandem Repeat Finder (TRF), considerando os cromossomos listados em `chromosome_sizes.txt` (sem contigs).
 * **Script 2:** estatísticas descritivas da genotipagem dos SSRs realizada pelo HipSTR.
-* **Script 3:** anotação dos SSRs utilizando o VariantAnnotationR.
+* **Script 3:** anotação dos SSRs utilizando o pacote `VariantAnnotation` (Bioconductor).
