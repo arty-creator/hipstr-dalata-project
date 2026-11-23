@@ -87,7 +87,7 @@ library(vcfR)
 ## 1.2 Configuration
 
 ```{r config}
-VCF_STR   <- "hipstr_mq1.vcf"
+VCF_STR   <- "hipstr_post_dumpstr_filtered_mq1.vcf"
 GENOME_FA <- "genome.fasta"
 GTF_FILE  <- "mikado.loci.clean.step2.primaryTranscripts.gff3"
 PROM_UP   <- 2000
@@ -436,7 +436,7 @@ cat(sprintf(
   if (total_por_chrom == total_por_regiao) "OK — totals match" else "MISMATCH — investigate"
 ))
 
-write.csv(loc_summary, OUT_SUMMARY_CSV, row.names = FALSE)
+write.csv(loc_summary, "loc_summary_test.csv", row.names = FALSE)
 cat(sprintf("Saved: %s\n", OUT_SUMMARY_CSV))
 ```
 

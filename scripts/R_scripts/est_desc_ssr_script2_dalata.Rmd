@@ -434,9 +434,6 @@ p1b <- callrate_amostra %>%
 
 fig1_d2 <- p1a / p1b + plot_layout(heights = c(1.3, 1))
 fig1_d2
-
-# Sample ordering in p1a uses the cumulative fraction of DP ≥ 10 as the criterion, which places the best-sequenced samples on the left and makes it immediately visible which have an excess of low-coverage loci.
-# The "0–5" category threshold includes loci with DP = 0 that still have a called GT — this can occur if HipSTR assigned a genotype with support from flanking reads but without central reads.
 ```
 
 ## D2-15. Figure 2 — DP of called genotypes by sample
@@ -523,16 +520,14 @@ p3b <- gldiff_long %>%
   ggplot(aes(x = GLDIFF)) +
   geom_histogram(bins = 60, fill = "#CC79A7", color = "white",
                  linewidth = 0.1, alpha = 0.9) +
-  geom_vline(xintercept = 2, linetype = "dashed",
-             color = "grey40", linewidth = 0.6) +
-  annotate("text", x = 3, y = Inf, label = "GLDIFF = 2",
-           hjust = 0, vjust = 1.5, size = 3, color = "grey30") +
+  geom_vline(xintercept = median(gldiff_long$GLDIFF, na.rm = TRUE),
+             linetype = "dashed", color = "grey40", linewidth = 0.6) +
   scale_x_log10(breaks = c(1, 2, 5, 10, 20, 50, 100),
                 labels = c(1, 2, 5, 10, 20, 50, 100)) +
   scale_y_continuous(labels = label_comma(), expand = c(0, 0)) +
   labs(
     title    = "B  Likelihood difference between genotypes (GLDIFF)",
-    subtitle = "Log10 scale; higher values indicate greater confidence in the call",
+    subtitle = "Log10 scale; higher values indicate greater confidence in the call; dashed line = median",
     x        = "GLDIFF (log10)",
     y        = "Frequency"
   )

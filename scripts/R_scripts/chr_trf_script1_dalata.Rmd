@@ -297,6 +297,8 @@ pie_plot <- ggplot(motif_counts,
                       format(sum(motif_counts$Count), big.mark = ","))
   )
 
+pie_plot
+
 # Export
 ggsave("motif_distribution_publication.png", pie_plot,
        width = 200, height = 160, units = "mm", dpi = 600, bg = "white")
@@ -436,6 +438,8 @@ scatter_plot <- ggplot(scatter_combined,
     caption = paste0("Genome average: ", round(genome_pct, 2), "%")
   )
 
+scatter_plot
+
 # Export 
 ggsave("genome_ssr_percentage_scatter.png", scatter_plot,
        width = 220, height = 140, units = "mm", dpi = 600, bg = "white")
@@ -571,6 +575,8 @@ boxplot_plot <- ggplot(boxplot_data,
     caption  = paste0("Total STRs: ",
                       format(sum(boxplot_stats$n), big.mark = ","))
   )
+
+boxplot_plot
 
 # Export
 ggsave("str_length_by_motif_boxplot.png", boxplot_plot,
@@ -843,4 +849,3 @@ ggsave("physical_map_ssr_discovered.tiff", physical_map_disc,
        width = 220, height = 180, units = "mm", dpi = 600,
        compression = "lzw", bg = "white")
 ```
-
