@@ -53,6 +53,8 @@ Exploratory identification of repetitive regions in the reference genome using *
 
 Copy number, period, and other array characteristics are obtained as algorithm outputs and do not represent targeted search parameters.
 
+The chromosome-level descriptive analysis in R uses the chromosomes listed in `chromosome_sizes.txt`; contigs are excluded from those summaries.
+
 ### 2. Coordinate Extraction and Processing — BED
 
 Conversion and processing of the identified loci coordinates into BED format, accounting for the difference between coordinate systems.
@@ -63,11 +65,11 @@ This stage preserves the distinction between **total array length**, **motif per
 
 The identified loci are genotyped directly from the 24 individuals' lcWGS data using **HipSTR**.
 
-This stage produces genotypes for the SSR loci identified in the reference genome and provides the basis for subsequent filtering and characterization analyses.
+The final genotyping VCF is `hipstr_mq1.vcf`. It contains the genotypes called by HipSTR before the downstream TRTools filtering stage.
 
 ### 4. Filtering and Statistics — TRTools
 
-Genotyping results are processed using **TRTools**, including locus filtering, variant-file processing, and generation of descriptive statistics.
+The genotyping VCF is first processed with HipSTR's `filter_vcf.py` script, which creates the intermediate `hipstr_mq1.filtered.vcf`. TRTools `qcSTR` is used for quality assessment, and `dumpSTR` applies the downstream filters. The final filtered VCF is `hipstr_post_dumpstr_filtered_mq1.vcf`. TRTools is also used to generate per-locus statistics.
 
 This stage defines the high-confidence dataset and characterizes the loci according to their respective motif classes.
 
@@ -123,10 +125,10 @@ hipstr-dalata-project/
 * `scripts/pipeline/` — main notebook for discovery, genotyping, and filtering;
 * `scripts/R_scripts/` — descriptive analyses and genomic localization in R Markdown;
 * `data/` — links and metadata for the external files required for execution;
-* `results/` — selected tabular results;
+* `results/` — selected tabular results, figures, and reports;
 * `environment/` — information about tool, package, and dependency versions.
 
-Large files, such as FASTQ, BAM, and complete VCF files, are not stored directly in this repository.
+Raw FASTQ and intermediate BAM files are not stored directly in this repository. A compressed archive of the filtered VCF is available in `data/`; see [data/README.md](data/README.md) for its name and the expected VCF filenames.
 
 ---
 
@@ -160,11 +162,9 @@ Citation information is also provided in `CITATION.cff`.
 
 ## License
 
-The scripts developed for this project are distributed under the **MIT License**.
+The repository metadata in `CITATION.cff` identify the project license as **MIT**. Third-party software, reference genomes, annotation files, databases, and other externally sourced resources remain subject to their respective licenses and terms of use.
 
-Third-party software, reference genomes, annotation files, databases, and other externally sourced resources are subject to their respective licenses and terms of use.
-
-See the `LICENSE` file for details when the license is added to the repository.
+The repository currently does not contain a `LICENSE` file.
 
 ---
 
