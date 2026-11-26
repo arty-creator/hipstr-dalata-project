@@ -12,12 +12,12 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  echo    = TRUE,
-  warning = FALSE,
-  message = FALSE,
-  comment = "#>",
-  fig.align = "center"
+knitr::opts_chunk$set(  # Define opções globais aplicadas a todos os chunks do documento
+  echo    = TRUE,       # Mostra o código junto com a saída
+  warning = FALSE,      # Oculta avisos
+  message = FALSE,      # Oculta mensagens
+  comment = "#>",       # Prefixo usado nas linhas de saída do console
+  fig.align = "center"  # Centraliza as figuras
 )
 ```
 
@@ -28,47 +28,47 @@ knitr::opts_chunk$set(
 > Required packages
 
 ```{r}
-library(dplyr)
-library(readr)
-library(ggplot2)
-library(tidyr)
-library(ggrepel)
-library(tidyverse) 
+library(dplyr)      # Manipulação de dados (filter, mutate, group_by, summarise)
+library(readr)      # Leitura de arquivos delimitados (read_tsv)
+library(ggplot2)    # Construção dos gráficos
+library(tidyr)      # Reorganização de tabelas (usado em complete)
+library(ggrepel)    # Rótulos sem sobreposição (geom_label_repel)
+library(tidyverse)  # Conjunto tidyverse, inclui forcats (fct_inorder)
 ```
 
 # 1. Read the data
 
 ```{r}
-str_data <- read_tsv("str_final.tsv", 
-                     col_names = c("Chromosome", "Start", "End", "Period_size", 
+str_data <- read_tsv("str_final.tsv",                                           # Lê a tabela de STRs detectadas pelo TRF, que não tem cabeçalho
+                     col_names = c("Chromosome", "Start", "End", "Period_size",  # Nomeia manualmente as colunas
                                    "Copy_number", "Pct_matches", "Pct_indels"),
-                     show_col_types = FALSE)
+                     show_col_types = FALSE)                                    # Suprime a mensagem com os tipos das colunas
 
-chr_sizes <- read_tsv("chromosome_sizes.txt", 
-                      col_names = c("Chromosome", "Chr_size_bp"),
-                      show_col_types = FALSE)
+chr_sizes <- read_tsv("chromosome_sizes.txt",                                   # Lê a tabela com o tamanho de cada cromossomo
+                      col_names = c("Chromosome", "Chr_size_bp"),               # Nomeia as duas colunas
+                      show_col_types = FALSE)                                   # Suprime a mensagem com os tipos das colunas
 ```
 
 # 2. Genome Size (characterized chromosomes - does not include contigs)
 
 ```{r}
-TOTAL_CHR_SIZE_BP <- sum(chr_sizes$Chr_size_bp)
+TOTAL_CHR_SIZE_BP <- sum(chr_sizes$Chr_size_bp)  # Soma o tamanho dos cromossomos e guarda como tamanho total do genoma, usado nas densidades e porcentagens
 ```
 
 
 # 3. Calculate the length of each STR
 
 ```{r}
-str_data <- str_data %>%
-  mutate(STR_length = End - Start + 1)
+str_data <- str_data %>%                # Atualiza a tabela de STRs
+  mutate(STR_length = End - Start + 1)  # Cria STR_length, o comprimento de cada locus em pb (End - Start + 1, pois as coordenadas são inclusivas)
 ```
 
 # 4. Classify STRs by repeat type (mono, di, tri, etc.)
 
 ```{r}
-str_data <- str_data %>%
-  mutate(STR_type = case_when(
-    Period_size == 1 ~ "Mono",
+str_data <- str_data %>%        # Atualiza a tabela de STRs
+  mutate(STR_type = case_when(  # Cria STR_type a partir do tamanho do período do motivo
+    Period_size == 1 ~ "Mono",  # Período de 1 pb vira Mono, 2 pb vira Di, e assim por diante até 9 pb (Nona)
     Period_size == 2 ~ "Di",
     Period_size == 3 ~ "Tri",
     Period_size == 4 ~ "Tetra",
@@ -77,18 +77,18 @@ str_data <- str_data %>%
     Period_size == 7 ~ "Hepta",
     Period_size == 8 ~ "Octa",
     Period_size == 9 ~ "Nona",
-    TRUE ~ "Other"
+    TRUE ~ "Other"              # Qualquer período fora de 1 a 9 pb recebe a classe Other
   ))
 ```
 
 # 5. Calculate statistics per chromosome
 
 ```{r}
-stats_per_chr <- str_data %>%
-  group_by(Chromosome) %>%
-  summarise(
-    No_of_SSRs = n(),
-    Mono = sum(STR_type == "Mono"),
+stats_per_chr <- str_data %>%                            # Cria a tabela de estatísticas por cromossomo
+  group_by(Chromosome) %>%                               # Agrupa as STRs por cromossomo
+  summarise(                                             # Resume cada grupo em uma única linha
+    No_of_SSRs = n(),                                    # Número total de SSRs no cromossomo
+    Mono = sum(STR_type == "Mono"),                      # Número de SSRs de cada tipo de motivo (Mono a Nona)
     Di = sum(STR_type == "Di"),
     Tri = sum(STR_type == "Tri"),
     Tetra = sum(STR_type == "Tetra"),
@@ -97,25 +97,25 @@ stats_per_chr <- str_data %>%
     Hepta = sum(STR_type == "Hepta"),
     Octa = sum(STR_type == "Octa"),
     Nona = sum(STR_type == "Nona"),
-    Total_SSR_length_bp = sum(STR_length),
-    Mean_STR_length_bp = round(mean(STR_length), 2),
-    Mean_copy_number = round(mean(Copy_number), 2),
-    Median_copy_number = round(median(Copy_number), 2),
-    Mean_pct_matches = round(mean(Pct_matches), 2),
-    .groups = 'drop'
+    Total_SSR_length_bp = sum(STR_length),               # Soma do comprimento de todas as SSRs, em pb
+    Mean_STR_length_bp = round(mean(STR_length), 2),     # Comprimento médio das SSRs, em pb
+    Mean_copy_number = round(mean(Copy_number), 2),      # Média do número de cópias
+    Median_copy_number = round(median(Copy_number), 2),  # Mediana do número de cópias
+    Mean_pct_matches = round(mean(Pct_matches), 2),      # Média da porcentagem de correspondência entre as cópias
+    .groups = 'drop'                                     # Remove o agrupamento ao final
   )
 ```
 
 # 6. Join with chromosome sizes
 
 ```{r}
-final_table <- chr_sizes %>%
-  left_join(stats_per_chr, by = "Chromosome") %>%
-  mutate(
-    SSRs_per_Mb = round(No_of_SSRs / (Chr_size_bp / 1e6), 2),
-    Pct_chr_in_SSRs = round((Total_SSR_length_bp / Chr_size_bp) * 100, 4)
+final_table <- chr_sizes %>%                                               # Parte da tabela de tamanhos dos cromossomos
+  left_join(stats_per_chr, by = "Chromosome") %>%                          # Anexa as estatísticas de SSR por cromossomo
+  mutate(                                                                  # Cria as colunas de densidade e de cobertura
+    SSRs_per_Mb = round(No_of_SSRs / (Chr_size_bp / 1e6), 2),              # SSRs por megabase, ou seja, número de SSRs dividido pelo tamanho em Mb
+    Pct_chr_in_SSRs = round((Total_SSR_length_bp / Chr_size_bp) * 100, 4)  # Porcentagem do cromossomo ocupada por SSRs
   ) %>%
-  dplyr::select(
+  dplyr::select(                                                           # Seleciona e ordena as colunas da tabela final (dplyr:: evita conflito com função homônima de outro pacote)
     Chromosome,
     Chr_size_bp,
     No_of_SSRs,
@@ -128,18 +128,18 @@ final_table <- chr_sizes %>%
     Median_copy_number,
     Mean_pct_matches
   ) %>%
-  arrange(Chromosome)
+  arrange(Chromosome)                                                      # Ordena as linhas pelo nome do cromossomo
 ```
 
 # 7. Add total/mean row
 
 ```{r}
-totals <- data.frame(
-  Chromosome = "Total/Mean",
-  Chr_size_bp = sum(final_table$Chr_size_bp),
-  No_of_SSRs = sum(final_table$No_of_SSRs),
-  SSRs_per_Mb = round(sum(final_table$No_of_SSRs) / (TOTAL_CHR_SIZE_BP / 1e6), 2),
-  Mono = sum(final_table$Mono),
+totals <- data.frame(                                                           # Monta a linha de totais e médias do genoma inteiro
+  Chromosome = "Total/Mean",                                                    # Rótulo da linha
+  Chr_size_bp = sum(final_table$Chr_size_bp),                                   # Soma dos tamanhos dos cromossomos
+  No_of_SSRs = sum(final_table$No_of_SSRs),                                     # Soma do número de SSRs
+  SSRs_per_Mb = round(sum(final_table$No_of_SSRs) / (TOTAL_CHR_SIZE_BP / 1e6), 2),  # SSRs por Mb no genoma, usando o tamanho total
+  Mono = sum(final_table$Mono),                                                 # Soma de cada tipo de motivo
   Di = sum(final_table$Di),
   Tri = sum(final_table$Tri),
   Tetra = sum(final_table$Tetra),
@@ -148,48 +148,48 @@ totals <- data.frame(
   Hepta = sum(final_table$Hepta),
   Octa = sum(final_table$Octa),
   Nona = sum(final_table$Nona),
-  Total_SSR_length_bp = sum(final_table$Total_SSR_length_bp),
-  Pct_chr_in_SSRs = round((sum(final_table$Total_SSR_length_bp) / TOTAL_CHR_SIZE_BP) * 100, 4),
-  Mean_STR_length_bp = round(mean(final_table$Mean_STR_length_bp), 2),
-  Mean_copy_number = round(mean(final_table$Mean_copy_number), 2),
-  Median_copy_number = round(median(final_table$Median_copy_number), 2),
-  Mean_pct_matches = round(mean(final_table$Mean_pct_matches), 2)
+  Total_SSR_length_bp = sum(final_table$Total_SSR_length_bp),                   # Soma do comprimento das SSRs
+  Pct_chr_in_SSRs = round((sum(final_table$Total_SSR_length_bp) / TOTAL_CHR_SIZE_BP) * 100, 4),  # Porcentagem do genoma ocupada por SSRs
+  Mean_STR_length_bp = round(mean(final_table$Mean_STR_length_bp), 2),          # Média dos comprimentos médios por cromossomo
+  Mean_copy_number = round(mean(final_table$Mean_copy_number), 2),              # Média das médias do número de cópias
+  Median_copy_number = round(median(final_table$Median_copy_number), 2),        # Mediana das medianas do número de cópias
+  Mean_pct_matches = round(mean(final_table$Mean_pct_matches), 2)               # Média das porcentagens médias de correspondência
 )
 
-final_table_with_totals <- bind_rows(final_table, totals)
+final_table_with_totals <- bind_rows(final_table, totals)                       # Empilha a linha de totais no fim da tabela por cromossomo
 ```
 
 # 8. Save results
 
 ```{r}
-write_tsv(final_table_with_totals, "str_statistics_per_chromosome.tsv")
-write_csv(final_table_with_totals, "str_statistics_per_chromosome.csv")
+write_tsv(final_table_with_totals, "str_statistics_per_chromosome.tsv")  # Salva a tabela final em TSV
+write_csv(final_table_with_totals, "str_statistics_per_chromosome.csv")  # Salva a mesma tabela em CSV
 ```
 
 # 9. Display table
 
 ```{r}
-cat("\n=== STR Statistics Per Chromosome ===\n\n")
-print(final_table_with_totals, n = Inf)
+cat("\n=== STR Statistics Per Chromosome ===\n\n")  # Imprime o título da tabela no console
+print(final_table_with_totals, n = Inf)             # Imprime todas as linhas da tabela (n = Inf)
 ```
 
 # 10. General summary
 
 ```{r}
-cat("\n=== Summary ===\n")
-cat(sprintf("Total chromosomes analyzed: %d\n", nrow(final_table)))
-cat(sprintf("Total chromosome size: %s bp (%.2f Mb)\n", 
+cat("\n=== Summary ===\n")                                                      # Imprime o título do resumo
+cat(sprintf("Total chromosomes analyzed: %d\n", nrow(final_table)))             # Número de cromossomos analisados
+cat(sprintf("Total chromosome size: %s bp (%.2f Mb)\n",                         # Tamanho total do genoma, em pb e em Mb
             format(TOTAL_CHR_SIZE_BP, big.mark = ","),
             TOTAL_CHR_SIZE_BP / 1e6))
-cat("\n")
-cat(sprintf("Total SSRs found: %s\n", format(sum(final_table$No_of_SSRs), big.mark = ",")))
-cat(sprintf("Average SSRs per Mb: %.2f\n", 
+cat("\n")                                                                       # Linha em branco
+cat(sprintf("Total SSRs found: %s\n", format(sum(final_table$No_of_SSRs), big.mark = ",")))  # Total de SSRs encontradas
+cat(sprintf("Average SSRs per Mb: %.2f\n",                                      # Média de SSRs por Mb
             sum(final_table$No_of_SSRs) / (TOTAL_CHR_SIZE_BP / 1e6)))
-cat(sprintf("Total SSR length: %s bp\n", format(sum(final_table$Total_SSR_length_bp), big.mark = ",")))
-cat(sprintf("Percentage of genome in SSRs: %.4f%%\n", 
+cat(sprintf("Total SSR length: %s bp\n", format(sum(final_table$Total_SSR_length_bp), big.mark = ",")))  # Comprimento total das SSRs
+cat(sprintf("Percentage of genome in SSRs: %.4f%%\n",                           # Porcentagem do genoma ocupada por SSRs
             (sum(final_table$Total_SSR_length_bp) / TOTAL_CHR_SIZE_BP) * 100))
 
-cat("\nResults saved to:\n")
+cat("\nResults saved to:\n")                                                    # Informa os arquivos salvos
 cat("  - str_statistics_per_chromosome.tsv\n")
 cat("  - str_statistics_per_chromosome.csv\n")
 ```
@@ -200,110 +200,110 @@ cat("  - str_statistics_per_chromosome.csv\n")
 
 ```{r}
 # Processing data 
-motif_counts <- data.frame(
-  Motif = c("Mono", "Di", "Tri", "Tetra", "Penta", "Hexa", "Hepta", "Octa", "Nona"),
-  Count = c(
+motif_counts <- data.frame(                                                     # Cria a tabela de contagem de SSRs por tipo de motivo
+  Motif = c("Mono", "Di", "Tri", "Tetra", "Penta", "Hexa", "Hepta", "Octa", "Nona"),  # Nomes dos tipos de motivo
+  Count = c(                                                                    # Total de cada tipo, somado sobre todos os cromossomos
     sum(final_table$Mono), sum(final_table$Di),   sum(final_table$Tri),
     sum(final_table$Tetra), sum(final_table$Penta), sum(final_table$Hexa),
     sum(final_table$Hepta), sum(final_table$Octa),  sum(final_table$Nona)
   )
 ) %>%
-  filter(Count > 0) %>%
-  mutate(
-    Percentage = round((Count / sum(Count)) * 100, 2),
-    Label      = paste0(Motif, "\n", format(Count, big.mark = ","),
+  filter(Count > 0) %>%                                                         # Remove tipos sem nenhuma ocorrência
+  mutate(                                                                       # Cria as colunas de porcentagem e rótulo
+    Percentage = round((Count / sum(Count)) * 100, 2),                          # Porcentagem de cada tipo sobre o total de SSRs
+    Label      = paste0(Motif, "\n", format(Count, big.mark = ","),             # Rótulo com nome, contagem e porcentagem
                         "\n(", Percentage, "%)")
   ) %>%
-  mutate(Motif = factor(Motif, levels = c("Mono", "Di", "Tri", "Tetra", "Penta",
+  mutate(Motif = factor(Motif, levels = c("Mono", "Di", "Tri", "Tetra", "Penta",  # Converte Motif em fator, fixando a ordem de Mono a Nona
                                            "Hexa", "Hepta", "Octa", "Nona")))
 
 # Label positions 
-motif_pos <- motif_counts %>%
+motif_pos <- motif_counts %>%                                                   # Calcula a posição de cada rótulo ao longo da pizza
   mutate(
-    csum = rev(cumsum(rev(Count))),
-    pos  = Count / 2 + lead(csum, 1),
-    pos  = if_else(is.na(pos), Count / 2, pos)
+    csum = rev(cumsum(rev(Count))),                                             # Soma acumulada invertida das contagens, alinhada à ordem de empilhamento
+    pos  = Count / 2 + lead(csum, 1),                                           # Posição do rótulo no meio da fatia
+    pos  = if_else(is.na(pos), Count / 2, pos)                                  # A última fatia não tem valor seguinte (NA), então usa só metade da contagem
   )
 
 # Okabe-Ito palette 
-motif_colors <- c(
+motif_colors <- c(                                                              # Vetor nomeado que associa cada tipo de motivo a uma cor
   "Mono"  = "#56B4E9", "Di"    = "#0072B2", "Tri"   = "#009E73",
   "Tetra" = "#F0E442", "Penta" = "#E69F00", "Hexa"  = "#D55E00",
   "Hepta" = "#CC79A7", "Octa"  = "#999999", "Nona"  = "#2C2C2A"
 )
 
 # Legend with n and % 
-legend_labels <- setNames(
-  paste0(
-    formatC(as.character(motif_counts$Motif), width = 5, flag = "-"),
-    "  n=", formatC(motif_counts$Count, format = "d", big.mark = ",", width = 7),
-    "  (", motif_counts$Percentage, "%)"
+legend_labels <- setNames(                                                      # Cria os rótulos da legenda, nomeados pelo tipo de motivo
+  paste0(                                                                       # Monta o texto de cada entrada da legenda
+    formatC(as.character(motif_counts$Motif), width = 5, flag = "-"),           # Nome do motivo alinhado à esquerda, com largura 5
+    "  n=", formatC(motif_counts$Count, format = "d", big.mark = ",", width = 7),  # Contagem com separador de milhar
+    "  (", motif_counts$Percentage, "%)"                                        # Porcentagem entre parênteses
   ),
-  motif_counts$Motif
+  motif_counts$Motif                                                            # Nomes do vetor, para casar cada rótulo com seu motivo na escala de cores
 )
 
 # Plot 
-pie_plot <- ggplot(motif_counts,
-                   aes(x = "", y = Count, fill = fct_inorder(Motif))) +
+pie_plot <- ggplot(motif_counts,                                                # Constrói o gráfico de pizza e guarda em pie_plot
+                   aes(x = "", y = Count, fill = fct_inorder(Motif))) +         # Mapeia a contagem no eixo y e o tipo de motivo no preenchimento, mantendo a ordem original
 
-  geom_col(width = 1, color = "white", linewidth = 0.7) +
-  coord_polar(theta = "y", start = 0) +
-  scale_fill_manual(values = motif_colors, labels = legend_labels) +
+  geom_col(width = 1, color = "white", linewidth = 0.7) +                       # Barra única empilhada, com bordas brancas entre as fatias
+  coord_polar(theta = "y", start = 0) +                                         # Converte a barra em pizza com coordenadas polares
+  scale_fill_manual(values = motif_colors, labels = legend_labels) +            # Aplica as cores por motivo e os rótulos da legenda
 
   # External labels with automatic arrows — without overlap
   geom_label_repel(
-    data          = motif_pos,
-    aes(y = pos, label = paste0(Motif, "\n", Percentage, "%")),
-    size          = 3.2,
-    color         = "grey10",
-    fill          = "white",
-    label.size    = 0.25,
-    label.padding = unit(0.18, "lines"),
-    segment.color = "grey10",
-    segment.size  = 0.4,
-    nudge_x       = 0.55,
-    show.legend   = FALSE,
-    max.overlaps  = Inf,
-    force         = 12,
-    family        = "sans"
+    data          = motif_pos,                                                  # Usa a tabela de posições dos rótulos
+    aes(y = pos, label = paste0(Motif, "\n", Percentage, "%")),                 # Posição no eixo y e texto do rótulo (motivo e porcentagem)
+    size          = 3.2,                                                        # Tamanho do texto
+    color         = "grey10",                                                   # Cor do texto
+    fill          = "white",                                                    # Fundo branco do rótulo
+    label.size    = 0.25,                                                       # Espessura da borda do rótulo
+    label.padding = unit(0.18, "lines"),                                        # Espaço interno do rótulo
+    segment.color = "grey10",                                                   # Cor da seta
+    segment.size  = 0.4,                                                        # Espessura da seta
+    nudge_x       = 0.55,                                                       # Desloca os rótulos para fora da pizza
+    show.legend   = FALSE,                                                      # Mantém esta camada fora da legenda
+    max.overlaps  = Inf,                                                        # Não descarta rótulos por sobreposição
+    force         = 12,                                                         # Força de repulsão entre rótulos
+    family        = "sans"                                                      # Família da fonte
   ) +
 
-  theme_void(base_size = 11) +
-  theme(
-    legend.position      = "right",
-    legend.title         = element_text(size = 10, face = "bold",
+  theme_void(base_size = 11) +                                                  # Tema sem eixos, grade ou fundo, adequado para pizza
+  theme(                                                                        # Ajustes finos de aparência
+    legend.position      = "right",                                             # Posição da legenda
+    legend.title         = element_text(size = 10, face = "bold",               # Aparência do título da legenda
                                         color = "grey10", family = "mono"),
-    legend.text          = element_text(size = 8.5, color = "grey10",
+    legend.text          = element_text(size = 8.5, color = "grey10",           # Aparência do texto da legenda
                                         family = "mono"),
-    legend.key.size      = unit(0.42, "cm"),
-    legend.spacing.y     = unit(0.15, "cm"),
+    legend.key.size      = unit(0.42, "cm"),                                    # Tamanho das chaves da legenda
+    legend.spacing.y     = unit(0.15, "cm"),                                    # Espaço vertical entre os itens da legenda
 
-    plot.title           = element_text(size = 13, face = "bold", hjust = 0.5,
+    plot.title           = element_text(size = 13, face = "bold", hjust = 0.5,  # Aparência do título do gráfico
                                         color = "grey10", margin = margin(b = 4)),
-    plot.subtitle        = element_text(size = 9, hjust = 0.5, color = "grey10",
+    plot.subtitle        = element_text(size = 9, hjust = 0.5, color = "grey10",  # Aparência do subtítulo
                                         margin = margin(b = 4)),
-    plot.caption         = element_text(size = 7.5, color = "grey10",
+    plot.caption         = element_text(size = 7.5, color = "grey10",           # Aparência do texto inferior do gráfico
                                         hjust = 0.5, margin = margin(t = 10)),
     plot.margin          = margin(14, 40, 14, 40),  # margem lateral generosa
-    plot.background      = element_rect(fill = "white", color = NA),
-    panel.background     = element_rect(fill = "white", color = NA)
+    plot.background      = element_rect(fill = "white", color = NA),            # Fundo da área total do gráfico
+    panel.background     = element_rect(fill = "white", color = NA)             # Fundo do painel
   ) +
 
-  labs(
-    title    = "Distribution of Discovered SSR loci by Motif Types",
-    subtitle = "Simple sequence repeats classified by repeat unit length",
-    fill     = "Motif type",
-    caption  = paste0("Total SSRs: ",
+  labs(                                                                         # Textos do gráfico
+    title    = "Distribution of Discovered SSR loci by Motif Types",            # Título
+    subtitle = "Simple sequence repeats classified by repeat unit length",      # Subtítulo
+    fill     = "Motif type",                                                    # Título da legenda de preenchimento
+    caption  = paste0("Total SSRs: ",                                           # Texto inferior com o total de SSRs
                       format(sum(motif_counts$Count), big.mark = ","))
   )
 
-pie_plot
+pie_plot                                                                        # Exibe o gráfico no documento
 
 # Export
-ggsave("motif_distribution_publication.png", pie_plot,
+ggsave("motif_distribution_publication.png", pie_plot,                          # Salva a pizza em PNG, 200 x 160 mm, 600 dpi, fundo branco
        width = 200, height = 160, units = "mm", dpi = 600, bg = "white")
 
-ggsave("motif_distribution_publication.tiff", pie_plot,
+ggsave("motif_distribution_publication.tiff", pie_plot,                         # Salva a pizza em TIFF com compressão LZW, mesmas dimensões
        width = 200, height = 160, units = "mm", dpi = 600,
        compression = "lzw", bg = "white")
 ```
@@ -312,139 +312,139 @@ ggsave("motif_distribution_publication.tiff", pie_plot,
 
 ```{r}
 # Processing data 
-scatter_data <- final_table %>%
-  mutate(Type = "Chromosome")
+scatter_data <- final_table %>%                                                 # Prepara os dados por cromossomo para o gráfico
+  mutate(Type = "Chromosome")                                                   # Marca cada linha como Chromosome, usado para definir cor e forma
 
-genome_total <- data.frame(
-  Chromosome     = "Genome Total",
-  Pct_chr_in_SSRs = (sum(final_table$Total_SSR_length_bp) / TOTAL_CHR_SIZE_BP) * 100,
-  Type           = "Genome Total"
+genome_total <- data.frame(                                                     # Cria uma linha extra com o valor do genoma inteiro
+  Chromosome     = "Genome Total",                                              # Nome da linha extra
+  Pct_chr_in_SSRs = (sum(final_table$Total_SSR_length_bp) / TOTAL_CHR_SIZE_BP) * 100,  # Porcentagem do genoma ocupada por SSRs
+  Type           = "Genome Total"                                               # Tipo usado para diferenciar o ponto do genoma total
 )
 
-scatter_combined <- bind_rows(
-  scatter_data %>% dplyr::select(Chromosome, Pct_chr_in_SSRs, Type),
-  genome_total
+scatter_combined <- bind_rows(                                                  # Junta cromossomos e total do genoma em uma única tabela
+  scatter_data %>% dplyr::select(Chromosome, Pct_chr_in_SSRs, Type),            # Mantém só as colunas necessárias nos dados dos cromossomos
+  genome_total                                                                  # Linha do total do genoma
 )
 
-scatter_combined$Chromosome <- factor(
+scatter_combined$Chromosome <- factor(                                          # Converte Chromosome em fator, fixando a ordem no eixo x
   scatter_combined$Chromosome,
-  levels = c(sort(unique(final_table$Chromosome)), "Genome Total")
+  levels = c(sort(unique(final_table$Chromosome)), "Genome Total")              # Cromossomos em ordem alfabética e Genome Total por último
 )
 
 # Valor da linha de referência
-genome_pct <- genome_total$Pct_chr_in_SSRs
+genome_pct <- genome_total$Pct_chr_in_SSRs                                      # Guarda a porcentagem do genoma para usar na linha de referência e nos textos
 
 # Plot
-scatter_plot <- ggplot(scatter_combined,
-                       aes(x = Chromosome, y = Pct_chr_in_SSRs,
+scatter_plot <- ggplot(scatter_combined,                                        # Constrói o gráfico tipo pirulito e guarda em scatter_plot
+                       aes(x = Chromosome, y = Pct_chr_in_SSRs,                 # Cromossomo no eixo x, porcentagem no eixo y, cor e forma pelo tipo
                            color = Type, shape = Type)) +
 
   # Subtle vertical grid line to guide the eye across chromosomes
   geom_vline(
-    xintercept = seq_along(levels(scatter_combined$Chromosome)),
-    color = "grey92", linewidth = 0.4
+    xintercept = seq_along(levels(scatter_combined$Chromosome)),                # Uma linha vertical para cada posição de cromossomo
+    color = "grey92", linewidth = 0.4                                           # Cor e espessura da linha
   ) +
 
   # Genome total reference line — behind the points
   geom_hline(
-    yintercept = genome_pct,
-    linetype   = "dashed",
-    color      = "#CC79A7",
-    linewidth  = 0.6,
-    alpha      = 0.8
+    yintercept = genome_pct,                                                    # Posição y igual à porcentagem do genoma
+    linetype   = "dashed",                                                      # Linha tracejada
+    color      = "#CC79A7",                                                     # Cor rosa da paleta
+    linewidth  = 0.6,                                                           # Espessura da linha
+    alpha      = 0.8                                                            # Transparência
   ) +
 
   # Lollipop: stem from the point to y = 0 — adds visual weight without clutter
   geom_segment(
-    data = filter(scatter_combined, Type == "Chromosome"),
-    aes(x = Chromosome, xend = Chromosome,
+    data = filter(scatter_combined, Type == "Chromosome"),                      # Usa só as linhas do tipo Chromosome
+    aes(x = Chromosome, xend = Chromosome,                                      # Haste vertical de y = 0 até o valor de cada cromossomo
         y = 0, yend = Pct_chr_in_SSRs),
-    color     = "#56B4E9",
-    linewidth = 0.5,
-    alpha     = 0.5
+    color     = "#56B4E9",                                                      # Cor azul clara da haste
+    linewidth = 0.5,                                                            # Espessura da haste
+    alpha     = 0.5                                                             # Transparência
   ) +
 
   # Points
-  geom_point(size = 3.8, alpha = 0.95) +
+  geom_point(size = 3.8, alpha = 0.95) +                                        # Desenha os pontos com tamanho 3,8 e leve transparência
 
   # Okabe-Ito palette — mesma do pie chart
-  scale_color_manual(
+  scale_color_manual(                                                           # Define a cor de cada tipo
     values = c("Chromosome" = "#0072B2", "Genome Total" = "#CC79A7")
   ) +
-  scale_shape_manual(
+  scale_shape_manual(                                                           # Define a forma do ponto, círculo para cromossomos e losango para o total
     values = c("Chromosome" = 19, "Genome Total" = 18)
   ) +
 
   # Y-axis starts at 0
   scale_y_continuous(
-    expand = expansion(mult = c(0, 0.08)),
-    labels = function(x) paste0(x, "%")
+    expand = expansion(mult = c(0, 0.08)),                                      # Sem folga embaixo e 8% de folga acima
+    labels = function(x) paste0(x, "%")                                         # Acrescenta o símbolo % aos valores do eixo
   ) +
 
   # Reference line annotation (avoids redundant legend)
   annotate(
-    "text",
-    x     = length(levels(scatter_combined$Chromosome)) - 0.3,
-    y     = genome_pct + 0.05,
-    label = paste0("Genome avg: ", round(genome_pct, 2), "%"),
-    color = "#CC79A7",
-    size  = 3.2,
-    hjust = 1,
-    fontface = "italic"
+    "text",                                                                     # Tipo de camada, texto
+    x     = length(levels(scatter_combined$Chromosome)) - 0.3,                  # Posição x perto da extremidade direita
+    y     = genome_pct + 0.05,                                                  # Posição y logo acima da linha de referência
+    label = paste0("Genome avg: ", round(genome_pct, 2), "%"),                  # Texto com a média do genoma
+    color = "#CC79A7",                                                          # Cor do texto
+    size  = 3.2,                                                                # Tamanho do texto
+    hjust = 1,                                                                  # Alinha o texto pela direita
+    fontface = "italic"                                                         # Itálico
   ) +
 
-  theme_bw(base_size = 11) +
+  theme_bw(base_size = 11) +                                                    # Tema base com fundo branco e bordas
   theme(
     # Axes
-    axis.text.x      = element_text(angle = 45, hjust = 1, size = 9,
+    axis.text.x      = element_text(angle = 45, hjust = 1, size = 9,            # Aparência dos rótulos do eixo x
                                     color = "grey20"),
-    axis.text.y      = element_text(size = 9, color = "grey20"),
-    axis.title       = element_text(size = 11, face = "bold", color = "grey10"),
-    axis.ticks       = element_line(color = "grey80", linewidth = 0.35),
+    axis.text.y      = element_text(size = 9, color = "grey20"),                # Aparência dos rótulos do eixo y
+    axis.title       = element_text(size = 11, face = "bold", color = "grey10"),  # Aparência dos títulos dos eixos
+    axis.ticks       = element_line(color = "grey80", linewidth = 0.35),        # Aparência das marcas dos eixos
 
     # Grid — horizontal only
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor   = element_blank(),
-    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.4),
-    panel.border       = element_rect(color = "grey80", linewidth = 0.5),
+    panel.grid.major.x = element_blank(),                                       # Remove as linhas de grade verticais
+    panel.grid.minor   = element_blank(),                                       # Remove a grade secundária
+    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.4),       # Aparência das linhas de grade horizontais
+    panel.border       = element_rect(color = "grey80", linewidth = 0.5),       # Aparência da borda do painel
 
     # Legend
-    legend.position    = "top",
-    legend.title       = element_blank(),
-    legend.text        = element_text(size = 10, color = "grey20"),
-    legend.key.size    = unit(0.45, "cm"),
-    legend.spacing.x   = unit(0.3, "cm"),
+    legend.position    = "top",                                                 # Posição da legenda
+    legend.title       = element_blank(),                                       # Remove o título da legenda
+    legend.text        = element_text(size = 10, color = "grey20"),             # Aparência do texto da legenda
+    legend.key.size    = unit(0.45, "cm"),                                      # Tamanho das chaves da legenda
+    legend.spacing.x   = unit(0.3, "cm"),                                       # Espaço horizontal entre os itens da legenda
 
     # Titles
-    plot.title         = element_text(size = 13, face = "bold", hjust = 0.5,
+    plot.title         = element_text(size = 13, face = "bold", hjust = 0.5,    # Aparência do título do gráfico
                                       color = "grey10", margin = margin(b = 4)),
-    plot.subtitle      = element_text(size = 9, hjust = 0.5, color = "grey50",
+    plot.subtitle      = element_text(size = 9, hjust = 0.5, color = "grey50",  # Aparência do subtítulo
                                       margin = margin(b = 8)),
-    plot.caption       = element_text(size = 7.5, color = "grey55",
+    plot.caption       = element_text(size = 7.5, color = "grey55",             # Aparência do texto inferior do gráfico
                                       hjust = 0.5, margin = margin(t = 8)),
 
     # Background
-    plot.background    = element_rect(fill = "white", color = NA),
-    panel.background   = element_rect(fill = "white", color = NA),
-    plot.margin        = margin(14, 20, 14, 14)
+    plot.background    = element_rect(fill = "white", color = NA),              # Fundo da área total do gráfico
+    panel.background   = element_rect(fill = "white", color = NA),              # Fundo do painel
+    plot.margin        = margin(14, 20, 14, 14)                                 # Margens externas do gráfico
   ) +
 
-  labs(
-    title    = "Percentage of Genome Occupied by SSRs per Chromosome",
-    subtitle = paste0("Genome total: ",
+  labs(                                                                         # Títulos e rótulos dos eixos
+    title    = "Percentage of Genome Occupied by SSRs per Chromosome",          # Título
+    subtitle = paste0("Genome total: ",                                         # Subtítulo com o tamanho total do genoma
                       format(TOTAL_CHR_SIZE_BP, big.mark = ","), " bp"),
-    x       = "Chromosome",
-    y       = "% Chromosome in SSRs",
-    caption = paste0("Genome average: ", round(genome_pct, 2), "%")
+    x       = "Chromosome",                                                     # Rótulo do eixo x
+    y       = "% Chromosome in SSRs",                                           # Rótulo do eixo y
+    caption = paste0("Genome average: ", round(genome_pct, 2), "%")             # Texto inferior com a média do genoma
   )
 
-scatter_plot
+scatter_plot                                                                    # Exibe o gráfico no documento
 
 # Export 
-ggsave("genome_ssr_percentage_scatter.png", scatter_plot,
+ggsave("genome_ssr_percentage_scatter.png", scatter_plot,                       # Salva em PNG, 220 x 140 mm, 600 dpi, fundo branco
        width = 220, height = 140, units = "mm", dpi = 600, bg = "white")
 
-ggsave("genome_ssr_percentage_scatter.tiff", scatter_plot,
+ggsave("genome_ssr_percentage_scatter.tiff", scatter_plot,                      # Salva em TIFF com compressão LZW, mesmas dimensões
        width = 220, height = 140, units = "mm", dpi = 600,
        compression = "lzw", bg = "white")
 ```
@@ -453,141 +453,141 @@ ggsave("genome_ssr_percentage_scatter.tiff", scatter_plot,
 
 ```{r}
 # Processing data 
-boxplot_data <- str_data %>%
-  filter(STR_type != "Other") %>%
+boxplot_data <- str_data %>%                                                    # Prepara os dados para o boxplot
+  filter(STR_type != "Other") %>%                                               # Remove as STRs da classe Other
   mutate(
-    STR_type = factor(STR_type,
+    STR_type = factor(STR_type,                                                 # Converte STR_type em fator, fixando a ordem de Mono a Nona
                       levels = c("Mono", "Di", "Tri", "Tetra", "Penta",
                                  "Hexa", "Hepta", "Octa", "Nona"))
   )
 
-boxplot_stats <- boxplot_data %>%
-  group_by(STR_type) %>%
+boxplot_stats <- boxplot_data %>%                                               # Calcula o resumo por tipo de motivo
+  group_by(STR_type) %>%                                                        # Agrupa por tipo de motivo
   summarise(
-    median_length = median(STR_length),
-    mean_length   = mean(STR_length),
-    n             = n(),
-    .groups       = "drop"
+    median_length = median(STR_length),                                         # Mediana do comprimento
+    mean_length   = mean(STR_length),                                           # Média do comprimento
+    n             = n(),                                                        # Número de STRs
+    .groups       = "drop"                                                      # Remove o agrupamento
   )
 
 # Okabe-Ito palette 
-motif_colors <- c(
+motif_colors <- c(                                                              # Redefine as cores por tipo de motivo, com Nona em vermelho neste gráfico
   "Mono"  = "#56B4E9", "Di"    = "#0072B2", "Tri"   = "#009E73",
   "Tetra" = "#F0E442", "Penta" = "#E69F00", "Hexa"  = "#D55E00",
   "Hepta" = "#CC79A7", "Octa"  = "#999999", "Nona"  = "red"
 )
 
 # Versões mais escuras para a borda de cada box 
-motif_colors_dark <- c(
+motif_colors_dark <- c(                                                         # Vetor nomeado com tons mais escuros, usado no contorno das caixas
   "Mono"  = "#2185C5", "Di"    = "#004E8C", "Tri"   = "#006B4E",
   "Tetra" = "#C4B800", "Penta" = "#B07800", "Hexa"  = "#8C3A00",
   "Hepta" = "#A0527F", "Octa"  = "#666666", "Nona"  = "darkred"
 )
 
 # Anotação n= por grupo 
-n_labels <- boxplot_stats %>%
-  mutate(label = paste0("n=", format(n, big.mark = ",")))
+n_labels <- boxplot_stats %>%                                                   # Cria o texto n= de cada tipo
+  mutate(label = paste0("n=", format(n, big.mark = ",")))                       # Rótulo com o número de STRs formatado
 
 # Plot 
-boxplot_plot <- ggplot(boxplot_data,
-                       aes(x = STR_type, y = STR_length, fill = STR_type)) +
+boxplot_plot <- ggplot(boxplot_data,                                            # Constrói o boxplot e guarda em boxplot_plot
+                       aes(x = STR_type, y = STR_length, fill = STR_type)) +    # Tipo de motivo no eixo x, comprimento no eixo y, preenchimento pelo tipo
 
   # Main box
   geom_boxplot(
-    aes(color = STR_type),
-    outlier.shape  = 21,
-    outlier.fill   = "white",
-    outlier.color  = "grey60",
-    outlier.alpha  = 0.35,
-    outlier.size   = 0.8,
-    linewidth      = 0.5,
-    width          = 0.6,
+    aes(color = STR_type),                                                      # Contorno colorido pelo tipo
+    outlier.shape  = 21,                                                        # Outliers como círculos com borda (forma 21)
+    outlier.fill   = "white",                                                   # Preenchimento branco dos outliers
+    outlier.color  = "grey60",                                                  # Cor da borda dos outliers
+    outlier.alpha  = 0.35,                                                      # Transparência dos outliers
+    outlier.size   = 0.8,                                                       # Tamanho dos outliers
+    linewidth      = 0.5,                                                       # Espessura das linhas da caixa
+    width          = 0.6,                                                       # Largura das caixas
     fatten         = 1.5    # mediana um pouco mais fina e elegante
   ) +
 
   # Median as text above the box
   stat_summary(
-    fun      = median,
-    geom     = "text",
-    aes(label = sprintf("%.0f bp", after_stat(y))),
-    vjust    = -0.6,
-    size     = 3.0,
-    color    = "grey25",
-    fontface = "bold",
-    family   = "sans"
+    fun      = median,                                                          # Calcula a mediana de cada grupo
+    geom     = "text",                                                          # Mostra o resultado como texto
+    aes(label = sprintf("%.0f bp", after_stat(y))),                             # Texto com a mediana arredondada, em pb
+    vjust    = -0.6,                                                            # Posiciona o texto acima da caixa
+    size     = 3.0,                                                             # Tamanho do texto
+    color    = "grey25",                                                        # Cor do texto
+    fontface = "bold",                                                          # Negrito
+    family   = "sans"                                                           # Família da fonte
   ) +
 
   # n= below each box (genomic figure standard)
   geom_text(
-    data     = n_labels,
-    aes(x = STR_type, y = -Inf, label = label),
-    vjust    = -0.5,
-    size     = 2.8,
-    color    = "grey50",
-    family   = "sans",
-    inherit.aes = FALSE
+    data     = n_labels,                                                        # Usa a tabela com o n de cada tipo
+    aes(x = STR_type, y = -Inf, label = label),                                 # Posição no fundo do gráfico (y = -Inf)
+    vjust    = -0.5,                                                            # Afasta o texto da borda inferior
+    size     = 2.8,                                                             # Tamanho do texto
+    color    = "grey50",                                                        # Cor do texto
+    family   = "sans",                                                          # Família da fonte
+    inherit.aes = FALSE                                                         # Não herda o mapeamento do ggplot principal
   ) +
 
-  scale_fill_manual(values = motif_colors) +
-  scale_color_manual(values = motif_colors_dark) +
+  scale_fill_manual(values = motif_colors) +                                    # Cor de preenchimento das caixas
+  scale_color_manual(values = motif_colors_dark) +                              # Cor dos contornos das caixas
 
-  scale_y_continuous(
-  labels = scales::comma,
-  expand = expansion(mult = c(0.05, 0.12))
+  scale_y_continuous(                                                           # Escala do eixo y
+  labels = scales::comma,                                                       # Formata os números com separador de milhar
+  expand = expansion(mult = c(0.05, 0.12))                                      # Folga de 5% embaixo e 12% acima
 ) +
 
-  theme_bw(base_size = 11) +
+  theme_bw(base_size = 11) +                                                    # Tema base com fundo branco e bordas
   theme(
     # Axes
-    axis.text.x      = element_text(size = 10, color = "grey15", face = "bold"),
-    axis.text.y      = element_text(size = 9,  color = "grey20"),
-    axis.title       = element_text(size = 11, face = "bold", color = "grey10"),
-    axis.ticks       = element_line(color = "grey80", linewidth = 0.35),
+    axis.text.x      = element_text(size = 10, color = "grey15", face = "bold"),  # Aparência dos rótulos do eixo x
+    axis.text.y      = element_text(size = 9,  color = "grey20"),               # Aparência dos rótulos do eixo y
+    axis.title       = element_text(size = 11, face = "bold", color = "grey10"),  # Aparência dos títulos dos eixos
+    axis.ticks       = element_line(color = "grey80", linewidth = 0.35),        # Aparência das marcas dos eixos
 
     # Grid — horizontal only
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor   = element_blank(),
-    panel.grid.major.y = element_line(color = "grey92", linewidth = 0.4),
-    panel.border       = element_rect(color = "grey80", linewidth = 0.5),
+    panel.grid.major.x = element_blank(),                                       # Remove as linhas de grade verticais
+    panel.grid.minor   = element_blank(),                                       # Remove a grade secundária
+    panel.grid.major.y = element_line(color = "grey92", linewidth = 0.4),       # Aparência das linhas de grade horizontais
+    panel.border       = element_rect(color = "grey80", linewidth = 0.5),       # Aparência da borda do painel
 
     # No legend (color is already represented on the X-axis)
-    legend.position  = "none",
+    legend.position  = "none",                                                  # Oculta a legenda, pois as cores já aparecem no eixo x
 
     # Titles
-    plot.title       = element_text(size = 13, face = "bold", hjust = 0.5,
+    plot.title       = element_text(size = 13, face = "bold", hjust = 0.5,      # Aparência do título do gráfico
                                     color = "grey10", margin = margin(b = 4)),
-    plot.subtitle    = element_text(size = 9,  hjust = 0.5, color = "grey50",
+    plot.subtitle    = element_text(size = 9,  hjust = 0.5, color = "grey50",   # Aparência do subtítulo
                                     margin = margin(b = 8)),
-    plot.caption     = element_text(size = 7.5, color = "grey55",
+    plot.caption     = element_text(size = 7.5, color = "grey55",               # Aparência do texto inferior do gráfico
                                     hjust = 0.5, margin = margin(t = 8)),
 
     # Background
-    plot.background  = element_rect(fill = "white", color = NA),
-    panel.background = element_rect(fill = "white", color = NA),
-    plot.margin      = margin(14, 20, 20, 14)
+    plot.background  = element_rect(fill = "white", color = NA),                # Fundo da área total do gráfico
+    panel.background = element_rect(fill = "white", color = NA),                # Fundo do painel
+    plot.margin      = margin(14, 20, 20, 14)                                   # Margens externas do gráfico
   ) +
 
-  labs(
-    title    = "Distribution of STR Length by Motif Type",
-    subtitle = "Median values shown above each box",
-    x        = "Motif type",
-    y        = "STR length (bp)",
-    caption  = paste0("Total STRs: ",
+  labs(                                                                         # Títulos e rótulos dos eixos
+    title    = "Distribution of STR Length by Motif Type",                      # Título
+    subtitle = "Median values shown above each box",                            # Subtítulo
+    x        = "Motif type",                                                    # Rótulo do eixo x
+    y        = "STR length (bp)",                                               # Rótulo do eixo y
+    caption  = paste0("Total STRs: ",                                           # Texto inferior com o total de STRs
                       format(sum(boxplot_stats$n), big.mark = ","))
   )
 
-boxplot_plot
+boxplot_plot                                                                    # Exibe o gráfico no documento
 
 # Export
-ggsave("str_length_by_motif_boxplot.png", boxplot_plot,
+ggsave("str_length_by_motif_boxplot.png", boxplot_plot,                         # Salva em PNG, 220 x 145 mm, 600 dpi, fundo branco
        width = 220, height = 145, units = "mm", dpi = 600, bg = "white")
 
-ggsave("str_length_by_motif_boxplot.tiff", boxplot_plot,
+ggsave("str_length_by_motif_boxplot.tiff", boxplot_plot,                        # Salva em TIFF com compressão LZW, mesmas dimensões
        width = 220, height = 145, units = "mm", dpi = 600,
        compression = "lzw", bg = "white")
 
-cat("\n=== Analysis Complete ===\n")
-cat("All plots have been saved.\n")
+cat("\n=== Analysis Complete ===\n")                                            # Mensagem de fim da análise
+cat("All plots have been saved.\n")                                             # Confirma que os gráficos foram salvos
 ```
 
 # 14. Physical map of motifs discovered via TRF (heatmap)
@@ -595,135 +595,135 @@ cat("All plots have been saved.\n")
 ```{r}
 # Processing data
 # Derive chromosome sizes from the discovered regions
-chrom_sizes_disc <- str_data %>%
-  group_by(Chromosome) %>%
-  summarise(size_bp = max(End), .groups = "drop") %>%
-  rename(chr = Chromosome)
+chrom_sizes_disc <- str_data %>%                                                # Estima o tamanho de cada cromossomo pela maior coordenada final encontrada
+  group_by(Chromosome) %>%                                                      # Agrupa por cromossomo
+  summarise(size_bp = max(End), .groups = "drop") %>%                           # Maior valor de End por cromossomo, em pb
+  rename(chr = Chromosome)                                                      # Renomeia Chromosome para chr
 
-map_data_disc <- str_data %>%
-  filter(STR_type != "Other") %>%
+map_data_disc <- str_data %>%                                                   # Prepara os loci para o mapa
+  filter(STR_type != "Other") %>%                                               # Remove as STRs da classe Other
   mutate(
-    chr          = Chromosome,
-    position_mb  = Start / 1e6,
-    motif_class_plot = factor(STR_type,
+    chr          = Chromosome,                                                  # Copia o nome do cromossomo para chr
+    position_mb  = Start / 1e6,                                                 # Posição inicial do locus, em Mb
+    motif_class_plot = factor(STR_type,                                         # Tipo de motivo como fator ordenado
                               levels = c("Mono", "Di", "Tri", "Tetra",
                                          "Penta", "Hexa", "Hepta", "Octa", "Nona"))
   )
 
-chrom_plot_data_disc <- chrom_sizes_disc %>%
-  mutate(size_mb = size_bp / 1e6) %>%
-  filter(chr %in% unique(map_data_disc$chr))
+chrom_plot_data_disc <- chrom_sizes_disc %>%                                    # Tabela de tamanhos usada para desenhar os cromossomos
+  mutate(size_mb = size_bp / 1e6) %>%                                           # Converte o tamanho para Mb
+  filter(chr %in% unique(map_data_disc$chr))                                    # Mantém só os cromossomos que têm loci
 
 # Parameter: window size
-window_mb <- 2
+window_mb <- 2                                                                  # Define a janela de contagem em 2 Mb
 
 # Density bins
-density_data_disc <- map_data_disc %>%
-  mutate(bin = floor(position_mb / window_mb) * window_mb) %>%
-  count(chr, bin, name = "n_loci") %>%
-  left_join(chrom_plot_data_disc %>% select(chr, size_mb), by = "chr") %>%
-  group_by(chr) %>%
-  complete(bin = seq(0, max(size_mb), by = window_mb),
-           fill = list(n_loci = 0)) %>%
-  filter(bin < size_mb) %>%
+density_data_disc <- map_data_disc %>%                                          # Conta os loci por janela em cada cromossomo
+  mutate(bin = floor(position_mb / window_mb) * window_mb) %>%                  # Atribui cada locus à sua janela, arredondando a posição para baixo
+  count(chr, bin, name = "n_loci") %>%                                          # Conta loci por cromossomo e janela
+  left_join(chrom_plot_data_disc %>% select(chr, size_mb), by = "chr") %>%      # Adiciona o tamanho do cromossomo, em Mb
+  group_by(chr) %>%                                                             # Agrupa por cromossomo
+  complete(bin = seq(0, max(size_mb), by = window_mb),                          # Completa as janelas sem loci, de 0 até o tamanho do cromossomo
+           fill = list(n_loci = 0)) %>%                                         # Janelas sem loci recebem contagem zero
+  filter(bin < size_mb) %>%                                                     # Descarta janelas além do fim do cromossomo
   mutate(
-    tile_top    = pmin(bin + window_mb, size_mb),
-    tile_center = (bin + tile_top) / 2,
-    tile_height = tile_top - bin
+    tile_top    = pmin(bin + window_mb, size_mb),                               # Topo da janela, limitado ao tamanho do cromossomo
+    tile_center = (bin + tile_top) / 2,                                         # Centro da janela, usado para posicionar o bloco
+    tile_height = tile_top - bin                                                # Altura do bloco, menor na última janela
   ) %>%
-  ungroup()
+  ungroup()                                                                     # Remove o agrupamento
 
 # Okabe-Ito palette
-motif_colors <- c(
+motif_colors <- c(                                                              # Vetor nomeado que associa cada tipo de motivo a uma cor
   "Mono"  = "#56B4E9", "Di"    = "#0072B2", "Tri"   = "#009E73",
   "Tetra" = "#F0E442", "Penta" = "#E69F00", "Hexa"  = "#D55E00",
   "Hepta" = "#CC79A7", "Octa"  = "#999999", "Nona"  = "#2C2C2A"
 )
 
 # Plot
-physical_map_disc <- ggplot() +
+physical_map_disc <- ggplot() +                                                 # Constrói o mapa de calor e guarda em physical_map_disc
 
   # Chromosome outline
   geom_rect(
-    data = chrom_plot_data_disc,
-    aes(xmin = as.numeric(factor(chr)) - 0.42,
+    data = chrom_plot_data_disc,                                                # Usa a tabela de tamanhos dos cromossomos
+    aes(xmin = as.numeric(factor(chr)) - 0.42,                                  # Retângulo centrado na posição do cromossomo no eixo x, indo de 0 ao tamanho em Mb
         xmax = as.numeric(factor(chr)) + 0.42,
         ymin = 0, ymax = size_mb),
-    fill = "grey97", color = "grey65", linewidth = 0.4
+    fill = "grey97", color = "grey65", linewidth = 0.4                          # Preenchimento, cor e espessura do contorno
   ) +
 
   # Density heatmap
   geom_tile(
-    data  = density_data_disc,
-    aes(x = chr, y = tile_center, fill = n_loci, height = tile_height),
-    width = 0.82
+    data  = density_data_disc,                                                  # Usa as janelas de densidade
+    aes(x = chr, y = tile_center, fill = n_loci, height = tile_height),         # Posição x pelo cromossomo, posição y pelo centro da janela, cor pelo número de loci e altura do bloco
+    width = 0.82                                                                # Largura do bloco
   ) +
 
-  scale_fill_gradientn(
-    colors = c("grey97", "#C6DBEF", "#6BAED6", "#2171B5", "#08306B"),
-    values = scales::rescale(c(0, 0.01, 0.25, 0.6, 1)),
-    name   = "SSR density\n(loci / bin)",
-    guide  = guide_colorbar(
-      barwidth     = 0.8,
-      barheight    = 8,
-      ticks        = TRUE,
-      frame.colour = "grey60"
+  scale_fill_gradientn(                                                         # Escala de cor contínua, de cinza claro a azul escuro
+    colors = c("grey97", "#C6DBEF", "#6BAED6", "#2171B5", "#08306B"),           # Cores da escala
+    values = scales::rescale(c(0, 0.01, 0.25, 0.6, 1)),                         # Posição de cada cor ao longo dos valores
+    name   = "SSR density\n(loci / bin)",                                       # Título da barra de cor
+    guide  = guide_colorbar(                                                    # Ajustes da barra de cor
+      barwidth     = 0.8,                                                       # Largura da barra
+      barheight    = 8,                                                         # Altura da barra
+      ticks        = TRUE,                                                      # Mostra marcas na barra
+      frame.colour = "grey60"                                                   # Contorno cinza da barra
     )
   ) +
 
-  scale_y_continuous(
-    expand = expansion(mult = c(0, 0.03)),
-    breaks = seq(0, 500, by = 50),
-    labels = function(x) paste0(x, " Mb")
+  scale_y_continuous(                                                           # Escala do eixo y, em Mb
+    expand = expansion(mult = c(0, 0.03)),                                      # Sem folga embaixo e 3% acima
+    breaks = seq(0, 500, by = 50),                                              # Marcas a cada 50 Mb, até 500
+    labels = function(x) paste0(x, " Mb")                                       # Acrescenta Mb aos valores do eixo
   ) +
 
-  theme_bw(base_size = 11) +
+  theme_bw(base_size = 11) +                                                    # Tema base com fundo branco e bordas
   theme(
-    axis.text.x      = element_text(size = 9, color = "grey20",
+    axis.text.x      = element_text(size = 9, color = "grey20",                 # Aparência dos rótulos do eixo x
                                     angle = 45, hjust = 1),
-    axis.text.y      = element_text(size = 9, color = "grey20"),
-    axis.title       = element_text(size = 11, face = "bold", color = "grey10"),
-    axis.ticks       = element_line(color = "grey80", linewidth = 0.35),
+    axis.text.y      = element_text(size = 9, color = "grey20"),                # Aparência dos rótulos do eixo y
+    axis.title       = element_text(size = 11, face = "bold", color = "grey10"),  # Aparência dos títulos dos eixos
+    axis.ticks       = element_line(color = "grey80", linewidth = 0.35),        # Aparência das marcas dos eixos
 
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor   = element_blank(),
-    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.35),
-    panel.border       = element_rect(color = "grey75", linewidth = 0.5),
+    panel.grid.major.x = element_blank(),                                       # Remove as linhas de grade verticais
+    panel.grid.minor   = element_blank(),                                       # Remove a grade secundária
+    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.35),      # Aparência das linhas de grade horizontais
+    panel.border       = element_rect(color = "grey75", linewidth = 0.5),       # Aparência da borda do painel
 
-    legend.position    = "right",
-    legend.title       = element_text(size = 10, face = "bold", color = "grey10"),
-    legend.text        = element_text(size = 8.5, color = "grey25"),
+    legend.position    = "right",                                               # Posição da legenda
+    legend.title       = element_text(size = 10, face = "bold", color = "grey10"),  # Aparência do título da legenda
+    legend.text        = element_text(size = 8.5, color = "grey25"),            # Aparência do texto da legenda
 
-    plot.title         = element_text(size = 13, face = "bold", hjust = 0.5,
+    plot.title         = element_text(size = 13, face = "bold", hjust = 0.5,    # Aparência do título do gráfico
                                       color = "grey10", margin = margin(b = 4)),
-    plot.subtitle      = element_text(size = 9, hjust = 0.5, color = "grey50",
+    plot.subtitle      = element_text(size = 9, hjust = 0.5, color = "grey50",  # Aparência do subtítulo
                                       margin = margin(b = 8)),
-    plot.caption       = element_text(size = 7.5, color = "grey55",
+    plot.caption       = element_text(size = 7.5, color = "grey55",             # Aparência do texto inferior do gráfico
                                       hjust = 0.5, margin = margin(t = 8)),
-    plot.background    = element_rect(fill = "white", color = NA),
-    panel.background   = element_rect(fill = "white", color = NA),
-    plot.margin        = margin(14, 14, 14, 14)
+    plot.background    = element_rect(fill = "white", color = NA),              # Fundo da área total do gráfico
+    panel.background   = element_rect(fill = "white", color = NA),              # Fundo do painel
+    plot.margin        = margin(14, 14, 14, 14)                                 # Margens externas do gráfico
   ) +
 
-  labs(
-    title    = "Heat Map: Genomic Distribution of Discovered SSRs",
-    subtitle = paste0(format(nrow(map_data_disc), big.mark = ","),
+  labs(                                                                         # Títulos e rótulos dos eixos
+    title    = "Heat Map: Genomic Distribution of Discovered SSRs",             # Título
+    subtitle = paste0(format(nrow(map_data_disc), big.mark = ","),              # Subtítulo com número de loci, número de cromossomos, tamanho da janela e tamanho total
                       " loci across ",
                       length(unique(map_data_disc$chr)),
                       " chromosomes  |  Window size: ", window_mb,
                       " Mb  |  Total: ",
                       format(TOTAL_CHR_SIZE_BP / 1e6, digits = 4), " Mb"),
-    x       = "Chromosome",
-    y       = "Position (Mb)",
-    caption = paste0("Density calculated in ", window_mb,
+    x       = "Chromosome",                                                     # Rótulo do eixo x
+    y       = "Position (Mb)",                                                  # Rótulo do eixo y
+    caption = paste0("Density calculated in ", window_mb,                       # Texto inferior com o tamanho da janela
                      " Mb non-overlapping windows")
   )
 
 # Export
-ggsave("physical_map_ssr_discovered_heat.png", physical_map_disc,
+ggsave("physical_map_ssr_discovered_heat.png", physical_map_disc,               # Salva em PNG, 220 x 180 mm, 600 dpi, fundo branco
        width = 220, height = 180, units = "mm", dpi = 600, bg = "white")
 
-ggsave("physical_map_ssr_discovered_heat.tiff", physical_map_disc,
+ggsave("physical_map_ssr_discovered_heat.tiff", physical_map_disc,              # Salva em TIFF com compressão LZW, mesmas dimensões
        width = 220, height = 180, units = "mm", dpi = 600,
        compression = "lzw", bg = "white")
 ```
@@ -732,120 +732,120 @@ ggsave("physical_map_ssr_discovered_heat.tiff", physical_map_disc,
 
 ```{r}
 # Processing data
-chrom_sizes_disc <- str_data %>%
-  group_by(Chromosome) %>%
-  summarise(size_bp = max(End), .groups = "drop") %>%
-  rename(chr = Chromosome)
+chrom_sizes_disc <- str_data %>%                                                # Estima o tamanho de cada cromossomo pela maior coordenada final encontrada
+  group_by(Chromosome) %>%                                                      # Agrupa por cromossomo
+  summarise(size_bp = max(End), .groups = "drop") %>%                           # Maior valor de End por cromossomo, em pb
+  rename(chr = Chromosome)                                                      # Renomeia Chromosome para chr
 
-map_data_disc <- str_data %>%
-  filter(STR_type != "Other") %>%
+map_data_disc <- str_data %>%                                                   # Prepara os loci para o mapa
+  filter(STR_type != "Other") %>%                                               # Remove as STRs da classe Other
   mutate(
-    chr              = Chromosome,
-    position_mb      = Start / 1e6,
-    motif_class_plot = factor(STR_type,
+    chr              = Chromosome,                                              # Copia o nome do cromossomo para chr
+    position_mb      = Start / 1e6,                                             # Posição inicial do locus, em Mb
+    motif_class_plot = factor(STR_type,                                         # Tipo de motivo como fator ordenado
                               levels = c("Mono", "Di", "Tri", "Tetra",
                                          "Penta", "Hexa", "Hepta", "Octa", "Nona"))
   )
 
-chrom_plot_data_disc <- chrom_sizes_disc %>%
-  mutate(size_mb = size_bp / 1e6) %>%
-  filter(chr %in% unique(map_data_disc$chr))
+chrom_plot_data_disc <- chrom_sizes_disc %>%                                    # Tabela de tamanhos usada para desenhar os cromossomos
+  mutate(size_mb = size_bp / 1e6) %>%                                           # Converte o tamanho para Mb
+  filter(chr %in% unique(map_data_disc$chr))                                    # Mantém só os cromossomos que têm loci
 
 # Okabe-Ito palette
-motif_colors <- c(
+motif_colors <- c(                                                              # Vetor nomeado que associa cada tipo de motivo a uma cor
   "Mono"  = "#56B4E9", "Di"    = "#0072B2", "Tri"   = "#009E73",
   "Tetra" = "#F0E442", "Penta" = "#E69F00", "Hexa"  = "#D55E00",
   "Hepta" = "#CC79A7", "Octa"  = "#999999", "Nona"  = "#2C2C2A"
 )
 
 # Legend com n por motif
-motif_n <- map_data_disc %>%
-  count(motif_class_plot, name = "n") %>%
-  mutate(label = paste0(motif_class_plot, "  (n=", format(n, big.mark = ","), ")"))
+motif_n <- map_data_disc %>%                                                    # Conta os loci de cada tipo de motivo
+  count(motif_class_plot, name = "n") %>%                                       # Número de loci por tipo
+  mutate(label = paste0(motif_class_plot, "  (n=", format(n, big.mark = ","), ")"))  # Rótulo com o tipo e o n
 
-legend_labels <- setNames(motif_n$label, motif_n$motif_class_plot)
+legend_labels <- setNames(motif_n$label, motif_n$motif_class_plot)              # Vetor nomeado de rótulos da legenda, ligado a cada tipo de motivo
 
 # Plot
-physical_map_disc <- ggplot() +
+physical_map_disc <- ggplot() +                                                 # Constrói o mapa físico e guarda em physical_map_disc
 
   # Chromosome outline
   geom_rect(
-    data = chrom_plot_data_disc,
-    aes(xmin = as.numeric(factor(chr)) - 0.38,
+    data = chrom_plot_data_disc,                                                # Usa a tabela de tamanhos dos cromossomos
+    aes(xmin = as.numeric(factor(chr)) - 0.38,                                  # Retângulo centrado na posição do cromossomo no eixo x, indo de 0 ao tamanho em Mb
         xmax = as.numeric(factor(chr)) + 0.38,
         ymin = 0, ymax = size_mb),
-    fill      = "grey96",
-    color     = "grey70",
-    linewidth = 0.4
+    fill      = "grey96",                                                       # Preenchimento do cromossomo
+    color     = "grey70",                                                       # Cor do contorno
+    linewidth = 0.4                                                             # Espessura do contorno
   ) +
 
   # Locus marks by motif
   geom_linerange(
-    data = map_data_disc,
-    aes(x     = chr,
+    data = map_data_disc,                                                       # Usa todos os loci
+    aes(x     = chr,                                                            # Posição x pelo cromossomo, segmento de position_mb até position_mb + 0,08 e cor pelo tipo de motivo
         ymin  = position_mb,
         ymax  = position_mb + 0.08,
         color = motif_class_plot),
-    linewidth = 18.0,
-    alpha     = 10.0
+    linewidth = 18.0,                                                           # Espessura do traço, larga o bastante para cobrir a largura do cromossomo
+    alpha     = 10.0                                                            # Transparência, o valor 10.0 está fora do intervalo usual de 0 a 1
   ) +
 
-  scale_color_manual(values = motif_colors, labels = legend_labels,
-                     name = "Motif type") +
+  scale_color_manual(values = motif_colors, labels = legend_labels,             # Aplica as cores por motivo, com rótulos que incluem o n
+                     name = "Motif type") +                                     # Título da legenda
 
-  scale_y_continuous(
-    expand = expansion(mult = c(0, 0.03)),
-    breaks = seq(0, 500, by = 50),
-    labels = function(x) paste0(x, " Mb")
+  scale_y_continuous(                                                           # Escala do eixo y, em Mb
+    expand = expansion(mult = c(0, 0.03)),                                      # Sem folga embaixo e 3% acima
+    breaks = seq(0, 500, by = 50),                                              # Marcas a cada 50 Mb, até 500
+    labels = function(x) paste0(x, " Mb")                                       # Acrescenta Mb aos valores do eixo
   ) +
 
-  theme_bw(base_size = 11) +
+  theme_bw(base_size = 11) +                                                    # Tema base com fundo branco e bordas
   theme(
-    axis.text.x        = element_text(size = 9, color = "grey20",
+    axis.text.x        = element_text(size = 9, color = "grey20",               # Aparência dos rótulos do eixo x
                                       angle = 45, hjust = 1),
-    axis.text.y        = element_text(size = 9, color = "grey20"),
-    axis.title         = element_text(size = 11, face = "bold", color = "grey10"),
-    axis.ticks         = element_line(color = "grey80", linewidth = 0.35),
+    axis.text.y        = element_text(size = 9, color = "grey20"),              # Aparência dos rótulos do eixo y
+    axis.title         = element_text(size = 11, face = "bold", color = "grey10"),  # Aparência dos títulos dos eixos
+    axis.ticks         = element_line(color = "grey80", linewidth = 0.35),      # Aparência das marcas dos eixos
 
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor   = element_blank(),
-    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.35),
-    panel.border       = element_rect(color = "grey75", linewidth = 0.5),
+    panel.grid.major.x = element_blank(),                                       # Remove as linhas de grade verticais
+    panel.grid.minor   = element_blank(),                                       # Remove a grade secundária
+    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.35),      # Aparência das linhas de grade horizontais
+    panel.border       = element_rect(color = "grey75", linewidth = 0.5),       # Aparência da borda do painel
 
-    legend.position    = "right",
-    legend.title       = element_text(size = 10, face = "bold", color = "grey10"),
-    legend.text        = element_text(size = 8.5, color = "grey25"),
-    legend.key.size    = unit(0.4, "cm"),
-    legend.spacing.y   = unit(0.15, "cm"),
+    legend.position    = "right",                                               # Posição da legenda
+    legend.title       = element_text(size = 10, face = "bold", color = "grey10"),  # Aparência do título da legenda
+    legend.text        = element_text(size = 8.5, color = "grey25"),            # Aparência do texto da legenda
+    legend.key.size    = unit(0.4, "cm"),                                       # Tamanho das chaves da legenda
+    legend.spacing.y   = unit(0.15, "cm"),                                      # Espaço vertical entre os itens da legenda
 
-    plot.title         = element_text(size = 13, face = "bold", hjust = 0.5,
+    plot.title         = element_text(size = 13, face = "bold", hjust = 0.5,    # Aparência do título do gráfico
                                       color = "grey10", margin = margin(b = 4)),
-    plot.subtitle      = element_text(size = 9, hjust = 0.5, color = "grey50",
+    plot.subtitle      = element_text(size = 9, hjust = 0.5, color = "grey50",  # Aparência do subtítulo
                                       margin = margin(b = 8)),
-    plot.caption       = element_text(size = 7.5, color = "grey55",
+    plot.caption       = element_text(size = 7.5, color = "grey55",             # Aparência do texto inferior do gráfico
                                       hjust = 0.5, margin = margin(t = 8)),
-    plot.background    = element_rect(fill = "white", color = NA),
-    panel.background   = element_rect(fill = "white", color = NA),
-    plot.margin        = margin(14, 14, 14, 14)
+    plot.background    = element_rect(fill = "white", color = NA),              # Fundo da área total do gráfico
+    panel.background   = element_rect(fill = "white", color = NA),              # Fundo do painel
+    plot.margin        = margin(14, 14, 14, 14)                                 # Margens externas do gráfico
   ) +
 
-  labs(
-    title    = "Physical Map: Genomic Distribution of Discovered SSRs",
-    subtitle = paste0(format(nrow(map_data_disc), big.mark = ","),
+  labs(                                                                         # Títulos e rótulos dos eixos
+    title    = "Physical Map: Genomic Distribution of Discovered SSRs",         # Título
+    subtitle = paste0(format(nrow(map_data_disc), big.mark = ","),              # Subtítulo com número de loci, número de cromossomos e tamanho total
                       " loci across ",
                       length(unique(map_data_disc$chr)),
                       " chromosomes  |  Total: ",
                       format(TOTAL_CHR_SIZE_BP / 1e6, digits = 4), " Mb"),
-    x       = "Chromosome",
-    y       = "Position (Mb)",
-    caption = "Each mark represents one SSR locus"
+    x       = "Chromosome",                                                     # Rótulo do eixo x
+    y       = "Position (Mb)",                                                  # Rótulo do eixo y
+    caption = "Each mark represents one SSR locus"                              # Texto inferior explicando cada marca
   )
 
 # Export
-ggsave("physical_map_ssr_discovered.png", physical_map_disc,
+ggsave("physical_map_ssr_discovered.png", physical_map_disc,                    # Salva em PNG, 220 x 180 mm, 600 dpi, fundo branco
        width = 220, height = 180, units = "mm", dpi = 600, bg = "white")
 
-ggsave("physical_map_ssr_discovered.tiff", physical_map_disc,
+ggsave("physical_map_ssr_discovered.tiff", physical_map_disc,                   # Salva em TIFF com compressão LZW, mesmas dimensões
        width = 220, height = 180, units = "mm", dpi = 600,
        compression = "lzw", bg = "white")
 ```
